@@ -45,7 +45,7 @@
 
     /* RAM-loaded */
 	flash0: flash@a0400 {
-		reg = <0x000a0400 0x7fc00>;
+		reg = <0x000a0400 0x7f800>;
 	};
 
 	sram0: memory@20010000 {
