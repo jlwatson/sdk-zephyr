@@ -14,6 +14,18 @@ config GPIO_CMSDK_AHB
 
 endif
 
+config APP_FLASH_OFFSET
+    hex "app flash offset"
+
+config APP_FLASH_SIZE
+    hex "app flash size"
+
+config APP_SRAM_OFFSET
+    hex "app sram offset"
+
+config APP_SRAM_SIZE
+    hex "app sram size"
+
 if SERIAL
 
 config UART_PL011
