@@ -109,13 +109,20 @@ SOURCE_CODE_INCLUDES = """
 #include <zephyr.h>
 #include <linker/linker-defs.h>
 #include <kernel_structs.h>
+
 #include <string.h>
+
+volatile u32_t __update_flag __attribute__((section(".rodata"))) = 0;
 """
 
 EXTERN_LINKER_VAR_DECLARATION = """
 extern char __{0}_{1}_start[];
 extern char __{0}_{1}_rom_start[];
 extern char __{0}_{1}_size[];
+
+volatile u32_t __{0}_{1}_update_start __attribute__((section(".rodata"))) = 0;
+volatile u32_t __{0}_{1}_update_rom_start __attribute__((section(".rodata"))) = 0;
+volatile u32_t __{0}_{1}_update_size __attribute__((section(".rodata"))) = 0;
 """
 
 
@@ -133,17 +140,31 @@ void bss_zeroing_relocation(void)
 }}
 """
 
-MEMCPY_TEMPLATE = """
-	(void)memcpy(&__{0}_{1}_start, &__{0}_{1}_rom_start,
-		     (u32_t) &__{0}_{1}_size);
-
+MEMCPY_TEMPLATE = """    
+        if ((u32_t *) __update_flag == NULL) {{
+            (void)memcpy(&__{0}_{1}_start, &__{0}_{1}_rom_start,
+		        (u32_t) &__{0}_{1}_size);
+        }}
 """
+
+#       }} else {{
+#            (void)memcpy((u32_t *)__{0}_{1}_update_start, (u32_t *)__{0}_{1}_update_rom_start,
+#                        __{0}_{1}_update_size);
+#       }}
+
 
 MEMSET_TEMPLATE = """
- 	(void)memset(&__{0}_bss_start, 0,
-		     (u32_t) &__{0}_bss_size);
+        if ((u32_t *) __update_flag == NULL) {{
+ 	    (void)memset(&__{0}_bss_start, 0,
+		        (u32_t) &__{0}_bss_size);
+        }}
 """
 
+# TODO support bss zeroing
+#        }} else {{
+#            (void)memset((u32_t *)__{0}_bss_update_start, 0,
+#                        __{0}_bss_update_size);
+#        }}
 
 def find_sections(filename, full_list_of_sections):
     with open(filename, 'rb') as obj_file_desc:
