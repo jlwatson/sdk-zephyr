@@ -8,9 +8,12 @@
 #include <toolchain.h>
 #include <linker/sections.h>
 #include <drivers/timer/system_timer.h>
+#include <drivers/uart.h>
 #include <wait_q.h>
 #include <power/power.h>
 #include <stdbool.h>
+
+#include <tfm_flash_veneers.h>
 
 #ifdef CONFIG_TICKLESS_IDLE_THRESH
 #define IDLE_THRESH CONFIG_TICKLESS_IDLE_THRESH
@@ -319,6 +322,8 @@ void idle(void *unused1, void *unused2, void *unused3)
 
 	z_timestamp_idle = k_cycle_get_32();
 #endif
+
+    update_uart_init();
 
 	while (true) {
 #if SMP_FALLBACK
