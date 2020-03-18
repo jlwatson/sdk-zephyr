@@ -149,6 +149,11 @@ struct update_header {
     u32_t text_size;
     u32_t rodata_start;
     u32_t rodata_size;
+    /*
+    u32_t update_rodata_start_addr;
+    u32_t update_rodata_rom_start_addr;
+    u32_t update_rodata_size_addr;
+    */
 };
 
 void apply_update_blocking(struct update_header *hdr) {

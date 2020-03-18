@@ -36,6 +36,8 @@
 #include <debug/gcov.h>
 #include <kswap.h>
 
+#include <tfm_flash_veneers.h>
+
 #define LOG_LEVEL CONFIG_KERNEL_LOG_LEVEL
 #include <logging/log.h>
 LOG_MODULE_REGISTER(os);
@@ -280,6 +282,7 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
     printk("*0xe0000 = %x\n", *(u32_t *) 0xe0000);
     printk("*0xffe00 = %x\n", *(u32_t *) 0xffe00);
     */
+
     //volatile int b = 1;
     //while(b);
 
