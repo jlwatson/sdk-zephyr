@@ -258,7 +258,38 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 
 	extern void main(void);
 
-	main();
+    extern volatile u32_t __update_flag;
+    static void (*volatile main_ptr)(void) __attribute__((section(".rodata")));
+
+    /*
+    u32_t buf;
+    while(tfm_flash_is_busy());
+    int rc = tfm_flash_read(0xe0000, &buf, 4);
+    if (rc != 0) {
+        printk("flash read returned with code %d\n", rc);
+    }
+    printk("flash 0xe0000 = %x\n", buf);
+
+    while(tfm_flash_is_busy());
+    rc = tfm_flash_read(0xffe00, &buf, 4);
+    if (rc != 0) {
+        printk("flash read returned with code %d\n", rc);
+    }
+    printk("flash 0xffe00 = %x\n", buf);
+
+    printk("*0xe0000 = %x\n", *(u32_t *) 0xe0000);
+    printk("*0xffe00 = %x\n", *(u32_t *) 0xffe00);
+    */
+    //volatile int b = 1;
+    //while(b);
+
+    if (__update_flag) {
+        //printk("calling main_ptr(%p) @ %p\n", &main_ptr, main_ptr);
+        main_ptr();
+    } else {
+        //printk("calling main @ %p\n", &main);
+        main();
+    }
 
 	/* Mark nonessenrial since main() has no more work to do */
 	z_main_thread.base.user_options &= ~K_ESSENTIAL;
