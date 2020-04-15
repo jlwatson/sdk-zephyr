@@ -36,7 +36,7 @@
 #include <debug/gcov.h>
 #include <kswap.h>
 
-#include <tfm_flash_veneers.h>
+//#include <tfm_flash_veneers.h>
 
 #define LOG_LEVEL CONFIG_KERNEL_LOG_LEVEL
 #include <logging/log.h>
@@ -260,8 +260,8 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 
 	extern void main(void);
 
-    extern volatile u32_t __update_flag;
-    static void (*volatile main_ptr)(void) __attribute__((section(".rodata")));
+    //extern volatile u32_t __update_flag;
+    //static void (*volatile main_ptr)(void) __attribute__((section(".rodata")));
 
     /*
     u32_t buf;
@@ -286,6 +286,7 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
     //volatile int b = 1;
     //while(b);
 
+    /*
     if (__update_flag) {
         //printk("calling main_ptr(%p) @ %p\n", &main_ptr, main_ptr);
         main_ptr();
@@ -293,6 +294,8 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
         //printk("calling main @ %p\n", &main);
         main();
     }
+    */
+    main();
 
 	/* Mark nonessenrial since main() has no more work to do */
 	z_main_thread.base.user_options &= ~K_ESSENTIAL;
