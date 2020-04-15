@@ -8,8 +8,7 @@
 """
 This script will relocate .text, .rodata, .data and .bss sections from required files
 and places it in the required memory region. This memory region and file
-are given to this python script in the form of a string.
-
+are given to this python script in the form of a string.  
 Example of such a string would be::
 
    SRAM2:/home/xyz/zephyr/samples/hello_world/src/main.c,\
@@ -86,6 +85,22 @@ LINKER_SECTION_SEQ = """
         __{0}_{1}_size = SIZEOF(_{2}_{3}_SECTION_NAME);
 """
 
+LINKER_TEXT_SECTION_SEQ = """
+
+/* Linker section for memory region {2} for  {3} section  */
+
+	SECTION_PROLOGUE(_{2}_{3}_SECTION_NAME,,)
+        {{
+                . = ALIGN(4);
+                {4}
+                __{0}_{1}_end = .;
+                . = ALIGN(0x1FE00);
+	}} {5}
+        __{0}_{1}_start = ADDR(_{2}_{3}_SECTION_NAME);
+        __{0}_{1}_size = __{0}_{1}_end - __{0}_{1}_start;
+"""
+#__{0}_{1}_size = SIZEOF(_{2}_{3}_SECTION_NAME);
+
 LINKER_SECTION_SEQ_MPU = """
 
 /* Linker section for memory region {2} for {3} section  */
@@ -157,14 +172,11 @@ MEMSET_TEMPLATE = """
         if ((u32_t *) __update_flag == NULL) {{
  	    (void)memset(&__{0}_bss_start, 0,
 		        (u32_t) &__{0}_bss_size);
+        }} else {{
+            (void)memset((u32_t *)__{0}_bss_update_start, 0,
+                        __{0}_bss_update_size);
         }}
 """
-
-# TODO support bss zeroing
-#        }} else {{
-#            (void)memset((u32_t *)__{0}_bss_update_start, 0,
-#                        __{0}_bss_update_size);
-#        }}
 
 def find_sections(filename, full_list_of_sections):
     with open(filename, 'rb') as obj_file_desc:
@@ -278,7 +290,11 @@ def string_create_helper(region, memory_type,
                 linker_string += LINKER_SECTION_SEQ_MPU.format(memory_type.lower(), region, memory_type.upper(),
                                                                region.upper(), tmp, load_address_string, align_size)
             else:
-                linker_string += LINKER_SECTION_SEQ.format(memory_type.lower(), region, memory_type.upper(),
+                if region == 'text':
+                    linker_string += LINKER_TEXT_SECTION_SEQ.format(memory_type.lower(), region, memory_type.upper(),
+                                                           region.upper(), tmp, load_address_string)
+                else:
+                    linker_string += LINKER_SECTION_SEQ.format(memory_type.lower(), region, memory_type.upper(),
                                                            region.upper(), tmp, load_address_string)
 
             if load_address_in_flash:
