@@ -1826,6 +1826,8 @@ extern void k_timer_init(struct k_timer *timer,
 			 k_timer_expiry_t expiry_fn,
 			 k_timer_stop_t stop_fn);
 
+extern void k_trigger_update();
+
 /**
  * @brief Start a timer.
  *

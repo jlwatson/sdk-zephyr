@@ -235,23 +235,12 @@ void apply_update_blocking(struct update_header *hdr) {
     }
     printk("*main_ptr_addr(%x) = %x\n", hdr->main_ptr_addr, buf);
 
-    
-    /*
-    printk("\n");
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_read(0xe0000, &buf, 4);
-    if (rc != 0) {
-        printk("flash read returned with code %d\n", rc);
-    }
-    printk("*0xe0000 = %x\n", buf);
+    volatile int b = 1;
+    while(b);
 
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_read(0xffe00, &buf, 4);
-    if (rc != 0) {
-        printk("flash read returned with code %d\n", rc);
-    }
-    printk("*0xffe00 = %x\n", buf);
-    */
+    // set update flag in RAM
+    //extern volatile u32_t __update_flag;
+    //__update_flag = 1;    
 }
 
 void update_uart_rx_cb(struct device *x) {
@@ -288,6 +277,10 @@ void update_uart_init() {
     if(rc != 0) {
         printk("flash init failed with code %d\n", rc);
     }
+}
+
+void k_trigger_update() {
+    //printk("haha!\n");
 }
 
 #if K_IDLE_PRIO < 0
