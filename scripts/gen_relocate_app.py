@@ -94,12 +94,21 @@ LINKER_TEXT_SECTION_SEQ = """
                 . = ALIGN(4);
                 {4}
                 __{0}_{1}_end = .;
-                . = ALIGN(0x1FE00);
+                . = ALIGN(4);
 	}} {5}
         __{0}_{1}_start = ADDR(_{2}_{3}_SECTION_NAME);
-        __{0}_{1}_size = __{0}_{1}_end - __{0}_{1}_start;
+        __{0}_{1}_size = SIZEOF(_{2}_{3}_SECTION_NAME);
 """
-#__{0}_{1}_size = SIZEOF(_{2}_{3}_SECTION_NAME);
+
+LINKER_FILL_REGION = """
+
+        .fill :
+        {{
+            FILL(0xFF);
+            . = __appflash_text_start + 0x1FE00 - 1;
+            BYTE(0xAA)
+        }} {0}
+"""
 
 LINKER_SECTION_SEQ_MPU = """
 
@@ -290,10 +299,10 @@ def string_create_helper(region, memory_type,
                 linker_string += LINKER_SECTION_SEQ_MPU.format(memory_type.lower(), region, memory_type.upper(),
                                                                region.upper(), tmp, load_address_string, align_size)
             else:
-                if region == 'text':
-                    linker_string += LINKER_TEXT_SECTION_SEQ.format(memory_type.lower(), region, memory_type.upper(),
-                                                           region.upper(), tmp, load_address_string)
-                else:
+                #if region == 'text':
+                #    linker_string += LINKER_TEXT_SECTION_SEQ.format(memory_type.lower(), region, memory_type.upper(),
+                                                           #region.upper(), tmp, load_address_string)
+                #else:
                     linker_string += LINKER_SECTION_SEQ.format(memory_type.lower(), region, memory_type.upper(),
                                                            region.upper(), tmp, load_address_string)
 
@@ -315,8 +324,12 @@ def generate_linker_script(linker_file, sram_data_linker_file, sram_bss_linker_f
             gen_string += MPU_RO_REGION_START.format(memory_type.lower(), memory_type.upper())
         gen_string += string_create_helper("text", memory_type, full_list_of_sections, 1)
         gen_string += string_create_helper("rodata", memory_type, full_list_of_sections, 1)
+
         if memory_type != "SRAM":
             gen_string += MPU_RO_REGION_END.format(memory_type.lower())
+
+        if memory_type == 'APPFLASH':
+            gen_string += LINKER_FILL_REGION.format(LOAD_ADDRESS_LOCATION_FLASH.format(memory_type))
 
         if memory_type == 'SRAM':
             gen_string_sram_data += string_create_helper("data", memory_type, full_list_of_sections, 1)
