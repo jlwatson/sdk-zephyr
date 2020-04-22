@@ -1,0 +1,22 @@
+menu "Live Updater"
+
+config LIVE_UPDATE
+	bool "Live update support"
+	help
+	  Enables support for live updates.
+
+if LIVE_UPDATE
+
+module = LIVE_UPDATE
+module-str = live_update
+source "subsys/logging/Kconfig.template.log_config"
+
+config LIVE_UPDATE_DEBUG
+	bool "Enable debug output"
+	default y
+	help
+	  Enable debug printing.
+
+endif # LIVE_UPDATE
+
+endmenu

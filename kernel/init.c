@@ -36,7 +36,9 @@
 #include <debug/gcov.h>
 #include <kswap.h>
 
-#include <tfm_flash_veneers.h>
+#ifdef CONFIG_LIVE_UPDATE
+#include <update/live_update.h>
+#endif
 
 #define LOG_LEVEL CONFIG_KERNEL_LOG_LEVEL
 #include <logging/log.h>
@@ -260,43 +262,15 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 
 	extern void main(void);
 
-    extern volatile u32_t __update_flag;
-    static void (*volatile main_ptr)(void) __attribute__((section(".rodata")));
-
-    /*
-    // test flash reads
-    u32_t buf;
-    while(tfm_flash_is_busy());
-    int rc = tfm_flash_read(0xe0000, &buf, 4);
-    if (rc != 0) {
-        printk("flash read returned with code %d\n", rc);
-    }
-    printk("flash 0xe0000 = %x\n", buf);
-
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_read(0xffe00, &buf, 4);
-    if (rc != 0) {
-        printk("flash read returned with code %d\n", rc);
-    }
-    printk("flash 0xffe00 = %x\n", buf);
-
-    printk("*0xe0000 = %x\n", *(u32_t *) 0xe0000);
-    printk("*0xffe00 = %x\n", *(u32_t *) 0xffe00);
-    */
-
-    // debug loop
+    // XXX debug loop
     //volatile int b = 1;
     //while(b);
 
-    printk("*update_flag_addr(%p): %x\n", &__update_flag, __update_flag);
-    printk("*main_ptr_addr(%p): %x\n", &main_ptr, main_ptr);
-    if (__update_flag) {
-        printk("calling updated main_ptr @ %p (old main @ %p)\n", main_ptr, &main);
-        main_ptr();
-    } else {
-        printk("calling main @ %p\n", &main);
-        main();
-    }
+#ifdef CONFIG_LIVE_UPDATE
+    lu_main(); 
+#else
+    main();
+#endif
 
 	/* Mark nonessenrial since main() has no more work to do */
 	z_main_thread.base.user_options &= ~K_ESSENTIAL;

@@ -8,12 +8,13 @@
 #include <toolchain.h>
 #include <linker/sections.h>
 #include <drivers/timer/system_timer.h>
-#include <drivers/uart.h>
 #include <wait_q.h>
 #include <power/power.h>
 #include <stdbool.h>
 
-#include <tfm_flash_veneers.h>
+#ifdef CONFIG_LIVE_UPDATE
+#include <update/live_update.h>
+#endif
 
 #ifdef CONFIG_TICKLESS_IDLE_THRESH
 #define IDLE_THRESH CONFIG_TICKLESS_IDLE_THRESH
@@ -133,156 +134,6 @@ void z_sys_power_save_idle_exit(s32_t ticks)
 	z_clock_idle_exit();
 }
 
-#define CURRENT_VERSION 0x6
-#define UPDATE_MAX_BYTES 4096
-
-static struct device *uart1_dev;
-static u32_t rx_buf[UPDATE_MAX_BYTES / sizeof(u32_t)];
-static u32_t rx_bytes = 0;
-
-struct update_header {
-    u32_t version;
-    u32_t main_ptr_addr;
-    u32_t main_ptr;
-    u32_t update_flag_addr;
-    u32_t text_start;
-    u32_t text_size;
-    u32_t rodata_start;
-    u32_t rodata_size;
-    u32_t bss_start;
-    u32_t bss_size;
-    u32_t bss_start_addr;
-    u32_t bss_size_addr;
-};
-
-void apply_update_blocking(struct update_header *hdr) {
-    printk("main_ptr@%x: %x -> %x\n", hdr->main_ptr_addr, *(u32_t *)hdr->main_ptr_addr, hdr->main_ptr);
-    printk("update_flag@%x: %x -> %x\n", hdr->update_flag_addr, *(u32_t *)hdr->update_flag_addr, 1);
-
-    u32_t *update_text = (u32_t *)((u8_t *)hdr + sizeof(struct update_header));
-    u32_t *update_rodata = (u32_t *)((u8_t *)hdr + sizeof(struct update_header) + hdr->text_size);
-
-    // write app .text
-    while(tfm_flash_is_busy());
-    /*
-    printk("writing following text (%d bytes) to %x: ", hdr->text_size, hdr->text_start);
-    for (int i = 0; i < (hdr->text_size / 4); i++) {
-        printk("%x ", update_text[i]);
-    }
-    printk("\n");
-    */
-    int rc = tfm_flash_write(hdr->text_start, update_text, hdr->text_size);
-    if (rc != 0) {
-        printk("text flash write returned with code %d\n", rc);
-    }
-
-    // write app .rodata
-    while(tfm_flash_is_busy());
-    /*
-    printk("writing following rodata (%d bytes) to %x: ", hdr->rodata_size, hdr->rodata_start);
-    for (int i = 0; i < (hdr->rodata_size / 4); i++) {
-        printk("%x ", update_rodata[i]);
-    }
-    printk("\n");
-    */
-    rc = tfm_flash_write(hdr->rodata_start, update_rodata, hdr->rodata_size);
-    if (rc != 0) {
-        printk("rodata flash write returned with code %d\n", rc);
-    }
-
-    // write bss values
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_write(hdr->bss_start_addr, &hdr->bss_start, 4);
-    if (rc != 0) {
-        printk("bss start flash write returned with code %d\n", rc);
-    }
-
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_write(hdr->bss_size_addr, &hdr->bss_size, 4);
-    if (rc != 0) {
-        printk("bss size flash write returned with code %d\n", rc);
-    }
-
-    // write updated main_ptr
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_write(hdr->main_ptr_addr, &hdr->main_ptr, 4);
-    if (rc != 0) {
-        printk("main ptr flash write returned with code %d\n", rc);
-    }
-
-    // write update flag
-    while(tfm_flash_is_busy());
-    u32_t update_flag = 1;
-    rc = tfm_flash_write(hdr->update_flag_addr, &update_flag, 1);
-    if (rc != 0) {
-        printk("update flag flash write returned with code %d\n", rc);
-    }
-
-    printk("-- sanity check --\n");
-    u32_t buf;
-
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_read(hdr->update_flag_addr, &buf, 4);
-    if (rc != 0) {
-        printk("flash read returned with code %d\n", rc);
-    }
-    printk("*update_flag_addr(%x) = %x\n", hdr->update_flag_addr, buf);
-
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_read(hdr->main_ptr_addr, &buf, 4);
-    if (rc != 0) {
-        printk("flash read returned with code %d\n", rc);
-    }
-    printk("*main_ptr_addr(%x) = %x\n", hdr->main_ptr_addr, buf);
-
-    volatile int b = 1;
-    while(b);
-
-    // set update flag in RAM
-    //extern volatile u32_t __update_flag;
-    //__update_flag = 1;    
-}
-
-void update_uart_rx_cb(struct device *x) {
-    if (uart_irq_rx_ready(x)) {
-        while (true) {
-            //printk("already read %d bytes, reading at most %d bytes to %x\n", rx_bytes, UPDATE_MAX_BYTES - rx_bytes, ((unsigned char *)rx_buf) + rx_bytes);
-            int len = uart_fifo_read(x, ((unsigned char *)rx_buf) + rx_bytes, UPDATE_MAX_BYTES - rx_bytes);
-            if (len == 0) break;
-            rx_bytes += len;
-            // struct update_header *hdr = (struct update_header *)((void *)rx_buf);
-            //printk("    read %d additional bytes, %d total, waiting for %d bytes total\n", len, rx_bytes, sizeof(struct update_header) + hdr->text_size + hdr->rodata_size);
-        }
-
-        if (rx_bytes >= sizeof(struct update_header)) {
-            struct update_header *hdr = (struct update_header *)((void *)rx_buf);
-            if (hdr->version != CURRENT_VERSION) {
-                printk("expected version %d, got version %d\n", CURRENT_VERSION, hdr->version);
-            } else if (hdr->version == CURRENT_VERSION && rx_bytes == sizeof(struct update_header) + hdr->text_size + hdr->rodata_size) {
-                printk("received: hdr->text_size=%d, hdr->rodata_size=%d, rx_bytes total=%d\n", hdr->text_size, hdr->rodata_size, rx_bytes);
-                apply_update_blocking(hdr);
-            }
-        }
-    }
-}
-
-void update_uart_init() {
-    uart1_dev = device_get_binding("UART_1");
-
-    uart_irq_callback_set(uart1_dev, update_uart_rx_cb);
-    uart_irq_rx_enable(uart1_dev);
-
-    // TODO: probably only init when necessary and de-init when not in use
-    int rc = tfm_flash_init();
-    if(rc != 0) {
-        printk("flash init failed with code %d\n", rc);
-    }
-}
-
-void k_trigger_update() {
-    //printk("haha!\n");
-}
-
 #if K_IDLE_PRIO < 0
 #define IDLE_YIELD_IF_COOP() k_yield()
 #else
@@ -302,8 +153,6 @@ void idle(void *unused1, void *unused2, void *unused3)
 
 	z_timestamp_idle = k_cycle_get_32();
 #endif
-
-    update_uart_init();
 
 	while (true) {
 #if SMP_FALLBACK
