@@ -7,10 +7,11 @@
 
 #include <autoconf.h>
 #include <drivers/uart.h>
-#include <tfm_flash_veneers.h>
 #include <zephyr/types.h>
 
-#define LIVE_UPDATE_CURRENT_VERSION 0x6
+#include <tfm_flash_veneers.h>
+
+#define LIVE_UPDATE_CURRENT_VERSION 0x7
 #define LIVE_UPDATE_MAX_BYTES 4096
 
 extern volatile u32_t __update_flag;
@@ -28,9 +29,12 @@ struct update_header {
     u32_t bss_size;
     u32_t bss_start_addr;
     u32_t bss_size_addr;
+    u32_t transfer_triples_size;
 };
 
 void lu_main(void);
+bool lu_trigger_on_timer(void);
+void lu_state_transfer_timer(struct k_timer **);
 
 #endif // ZEPHYR_INCLUDE_UPDATE_LIVE_UPDATE_H_
 

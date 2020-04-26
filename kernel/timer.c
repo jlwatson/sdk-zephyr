@@ -13,6 +13,10 @@
 #include <stdbool.h>
 #include <spinlock.h>
 
+#ifdef CONFIG_LIVE_UPDATE
+#include <update/live_update.h>
+#endif // CONFIG_LIVE_UPDATE
+
 static struct k_spinlock lock;
 
 #ifdef CONFIG_OBJECT_TRACING
@@ -48,6 +52,14 @@ void z_timer_expiration_handler(struct _timeout *t)
 	struct k_timer *timer = CONTAINER_OF(t, struct k_timer, timeout);
 	struct k_thread *thread;
 
+#ifdef CONFIG_LIVE_UPDATE
+    if(lu_trigger_on_timer()) {
+        printk("timer before %p\n", timer);
+        lu_state_transfer_timer(&timer);
+        printk("timer after %p\n", timer);
+    }
+#endif // CONFIG_LIVE_UPDATE
+
 	/*
 	 * if the timer is periodic, start it again; don't add _TICK_ALIGN
 	 * since we're already aligned to a tick boundary
@@ -63,6 +75,7 @@ void z_timer_expiration_handler(struct _timeout *t)
 
 	/* invoke timer expiry function */
 	if (timer->expiry_fn != NULL) {
+        printk("calling %p\n", timer->expiry_fn);
 		timer->expiry_fn(timer);
 	}
 

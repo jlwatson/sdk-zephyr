@@ -17,6 +17,12 @@ config LIVE_UPDATE_DEBUG
 	help
 	  Enable debug printing.
 
+config LIVE_UPDATE_FUTURE
+	bool "Enable unstable/incomplete features"
+	default n
+	help
+	  Enable unstable/incomplete features
+
 endif # LIVE_UPDATE
 
 endmenu

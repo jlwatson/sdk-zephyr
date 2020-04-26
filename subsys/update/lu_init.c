@@ -13,7 +13,7 @@ void lu_main(void) {
 
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
     printk("*update_flag_addr(%p): %x\n", &__update_flag, __update_flag);
-    printk("*main_ptr_addr(%p): %x\n", &main_ptr, main_ptr);
+    printk("*main_ptr_addr(%p): %p\n", &main_ptr, main_ptr);
 
     if (__update_flag) {
         printk("calling updated main_ptr @ %p (old main @ %p)\n", main_ptr, &main);
