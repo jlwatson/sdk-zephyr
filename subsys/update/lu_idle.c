@@ -1,5 +1,5 @@
 /*
- * Live update startup/system init
+ * Live update idle
  */
 
 #include <string.h>
@@ -8,7 +8,7 @@
 
 static u8_t update_ready;
 
-extern u32_t *state_transfer_triples;
+u32_t *state_transfer_triples;
 
 inline bool lu_trigger_on_timer(void) {
 #ifdef CONFIG_LIVE_UPDATE_FUTURE
@@ -119,7 +119,12 @@ void lu_state_transfer_timer(struct k_timer **t) {
 #endif // CONFIG_LIVE_UPDATE_FUTURE
 }
 
+
+/*
+ * Assumes fully-received update payload
+ */
 void lu_write_update(struct update_header *hdr) {
+
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
     printk("main_ptr@%x: %x -> %x\n", hdr->main_ptr_addr, *(u32_t *)hdr->main_ptr_addr, hdr->main_ptr);
     printk("update_flag@%x: %x -> %x\n", hdr->update_flag_addr, *(u32_t *)hdr->update_flag_addr, 1);

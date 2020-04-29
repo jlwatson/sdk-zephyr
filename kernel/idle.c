@@ -155,6 +155,8 @@ void idle(void *unused1, void *unused2, void *unused3)
 #endif
 
 	while (true) {
+        lu_uart_idle_read();
+
 #if SMP_FALLBACK
 		k_busy_wait(100);
 		k_yield();

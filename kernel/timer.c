@@ -75,7 +75,7 @@ void z_timer_expiration_handler(struct _timeout *t)
 
 	/* invoke timer expiry function */
 	if (timer->expiry_fn != NULL) {
-        printk("calling %p\n", timer->expiry_fn);
+        //printk("calling %p\n", timer->expiry_fn);
 		timer->expiry_fn(timer);
 	}
 

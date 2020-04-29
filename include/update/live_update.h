@@ -13,6 +13,7 @@
 
 #define LIVE_UPDATE_CURRENT_VERSION 0x7
 #define LIVE_UPDATE_MAX_BYTES 4096
+#define LIVE_UPDATE_READ_SIZE 32 // bytes read at a time in idle loop
 
 extern volatile u32_t __update_flag;
 
@@ -35,6 +36,7 @@ struct update_header {
 void lu_main(void);
 bool lu_trigger_on_timer(void);
 void lu_state_transfer_timer(struct k_timer **);
+void lu_uart_idle_read(void);
 
 #endif // ZEPHYR_INCLUDE_UPDATE_LIVE_UPDATE_H_
 
