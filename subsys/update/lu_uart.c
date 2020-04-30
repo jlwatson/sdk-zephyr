@@ -85,11 +85,12 @@ void lu_uart_idle_read () {
         u32_t expected_payload_size = sizeof(struct update_header) + 
                               hdr->text_size +
                               hdr->rodata_size +
-                              hdr->transfer_triples_size;
+                              hdr->transfer_triples_size +
+                              hdr->init_size;
         if (rx_bytes == expected_payload_size) {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-            printk("lu_uart_rx_cb: hdr->text_size=%d, hdr->rodata_size=%d, hdr->transfer_triples_size=%d, rx_bytes total=%d\n",
-                    hdr->text_size, hdr->rodata_size, hdr->transfer_triples_size, rx_bytes);
+            printk("lu_uart_rx_cb: hdr->text_size=%d, hdr->rodata_size=%d, hdr->transfer_triples_size=%d, hdr->init_size=%d, rx_bytes total=%d\n",
+                    hdr->text_size, hdr->rodata_size, hdr->transfer_triples_size, hdr->init_size, rx_bytes);
 #endif // CONFIG_LIVE_UPDATE_DEBUG
             lu_write_update(hdr);
         }
