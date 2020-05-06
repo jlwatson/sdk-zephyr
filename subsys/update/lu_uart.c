@@ -21,8 +21,6 @@ static u32_t rx_bytes = 0;
 // keep track of UART rx state so we can read over multiple idle intervals
 static atomic_t rx_ready;
 
-// TODO: add extern void app_test_rx_cb();
-
 /*
  * Initialize UART receive and start the secure-side flash driver to eventually write the update with.
  */
@@ -38,6 +36,15 @@ void lu_uart_init(void) {
     if (rc != 0) {
         printk("lu_init: flash init failed with code %d\n", rc);
     }
+}
+
+/*
+ * Reset UART update state. Normally called at the end of an update application
+ * to prep the OS for a future update. Assumption that updates don't happen
+ * back-to-back-to-back by just resetting received bytes counter.
+ */
+void lu_uart_reset(void) {
+    rx_bytes = 0;
 }
 
 /*

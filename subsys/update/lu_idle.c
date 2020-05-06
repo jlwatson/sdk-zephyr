@@ -4,6 +4,7 @@
 
 #include <string.h>
 #include <timeout_q.h>
+#include <wait_q.h>
 #include <update/live_update.h>
 
 static u8_t update_ready;
@@ -12,6 +13,7 @@ static struct update_header *lu_hdr;
 inline bool lu_trigger_on_timer(void) {
 #ifdef CONFIG_LIVE_UPDATE_FUTURE
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
+    //printk("timer trigger: ready? %d next expiry %x\n", update_ready, z_get_next_timeout_expiry());
     if (update_ready && z_get_next_timeout_expiry() == INT_MAX) {
         //printk("live_update: update triggered on timer\n");
     }
@@ -25,7 +27,7 @@ inline bool lu_trigger_on_timer(void) {
 
 void lu_state_transfer(void) {
 #ifdef CONFIG_LIVE_UPDATE_FUTURE
-    u32_t start_tick = *(u32_t *)0xE000E018;
+    //u32_t start_tick = *(u32_t *)0xE000E018;
     u32_t *triple = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size);
     u32_t *init_triples = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size + lu_hdr->transfer_triples_size);
     u32_t *end = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size + lu_hdr->transfer_triples_size + lu_hdr->init_size);
@@ -42,20 +44,23 @@ void lu_state_transfer(void) {
 
         triple += 3;
     } 
-    u32_t end_tick = *(u32_t *)0xE000E018;
-    printk("Data copy: %d ticks\n", start_tick - end_tick);
+    //u32_t end_tick = *(u32_t *)0xE000E018;
+    //printk("Data copy: %d ticks\n", start_tick - end_tick);
 
-    start_tick = *(u32_t *)0xE000E018;
+    //start_tick = *(u32_t *)0xE000E018;
     // set timer callbacks correctly
     while (triple != end) {
         struct k_timer *t = (struct k_timer *) triple[0];
         t->expiry_fn = (k_timer_expiry_t) triple[1];
         t->stop_fn = (k_timer_stop_t) triple[2];
 
+        // for now, just empty timer waitq XXX remove this eventually
+        z_waitq_init(&(t->wait_q));
+
         triple += 3;
     }
-    end_tick = *(u32_t *)0xE000E018;
-    printk("Timer setup: %d ticks\n", start_tick - end_tick);
+    //end_tick = *(u32_t *)0xE000E018;
+    //printk("Timer setup: %d ticks\n", start_tick - end_tick);
 
 #endif // CONFIG_LIVE_UPDATE_FUTURE
 }
@@ -70,7 +75,7 @@ void lu_state_transfer_timer(struct k_timer **t) {
     // modify what timer we're interested in to new
     //printk("rewiring timer... &t: %p t: %p *t: %p \n", &t, t, *t);
     
-    u32_t start_tick = *(u32_t *)0xE000E018;
+    //u32_t start_tick = *(u32_t *)0xE000E018;
     u32_t *triple = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size);
     u32_t *init_triples = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size + lu_hdr->transfer_triples_size);
     //u32_t *end = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size + lu_hdr->transfer_triples_size + lu_hdr->init_size);
@@ -107,12 +112,13 @@ void lu_state_transfer_timer(struct k_timer **t) {
         triple += 3;
     }
     */
-    u32_t end_tick = *(u32_t *)0xE000E018;
-    printk("Timer rewire: %d ticks\n", start_tick - end_tick);
+    //u32_t end_tick = *(u32_t *)0xE000E018;
+    //printk("Timer rewire: %d ticks\n", start_tick - end_tick);
 
     //printk("DONE\n");
     update_ready = 0;
     lu_hdr = NULL;
+    lu_uart_reset();
 #endif // CONFIG_LIVE_UPDATE_FUTURE
 }
 

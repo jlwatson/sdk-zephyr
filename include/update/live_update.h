@@ -35,9 +35,12 @@ struct update_header {
 };
 
 void lu_main(void);
+
 bool lu_trigger_on_timer(void);
 void lu_state_transfer_timer(struct k_timer **);
+
 void lu_uart_idle_read(void);
+void lu_uart_reset(void);
 
 #endif // ZEPHYR_INCLUDE_UPDATE_LIVE_UPDATE_H_
 
