@@ -176,7 +176,7 @@ void lu_write_update(struct update_header *hdr) {
     }
 
     // write bss location
-    // TODO zero out bss
+    memset((u32_t *)hdr->bss_start, 0, hdr->bss_size);
 
     while(tfm_flash_is_busy());
     rc = tfm_flash_write(hdr->bss_start_addr, &hdr->bss_start, 4);
