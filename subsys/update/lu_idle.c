@@ -61,6 +61,18 @@ void lu_state_transfer(void) {
     }
     //end_tick = *(u32_t *)0xE000E018;
     //printk("Timer setup: %d ticks\n", start_tick - end_tick);
+   
+    // XXX TODO hacky get rid of this
+    gpio_int_config sense_cfg = {
+        .type = 1,
+        .polarity = 1,
+        .cb = (void (*)(void)) lu_hdr->ventricle_int_cb
+    };
+
+    tfm_gpio_interrupt_enable(6, &sense_cfg);
+
+    sense_cfg.cb = (void (*)(void)) lu_hdr->atrial_int_cb;
+    tfm_gpio_interrupt_enable(7, &sense_cfg);
 
 #endif // CONFIG_LIVE_UPDATE_FUTURE
 }
