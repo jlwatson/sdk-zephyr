@@ -7,6 +7,7 @@
 // Prototypes
 
 extern void lu_write_update(struct update_header *);
+extern void lu_write_update_step();
 void lu_uart_rx_cb (struct device *);
 
 // UART USB interface (at least on the Musca)
@@ -60,6 +61,8 @@ void lu_uart_rx_cb (struct device *x) {
  * Idle handler - reads payload from UART and triggers update when complete
  */
 void lu_uart_idle_read () {
+    lu_write_update_step();    
+
     // don't do anything if no bytes are pending
     if (!atomic_get(&rx_ready)) return;
 
@@ -96,12 +99,11 @@ void lu_uart_idle_read () {
                               hdr->init_size;
         if (rx_bytes == expected_payload_size) {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-            printk("lu_uart_rx_cb: hdr->text_size=%d, hdr->rodata_size=%d, hdr->transfer_triples_size=%d, hdr->init_size=%d, rx_bytes total=%d\n",
+            printk("Received complete header, starting update write: hdr->text_size=%d, hdr->rodata_size=%d, hdr->transfer_triples_size=%d, hdr->init_size=%d, rx_bytes total=%d\n",
                     hdr->text_size, hdr->rodata_size, hdr->transfer_triples_size, hdr->init_size, rx_bytes);
 #endif // CONFIG_LIVE_UPDATE_DEBUG
             lu_write_update(hdr);
         }
-
     }
 }
 

@@ -12,7 +12,7 @@
 #include <tfm_gpio_veneers.h>
 #include <tfm_flash_veneers.h>
 
-#define LIVE_UPDATE_CURRENT_VERSION 0x9
+#define LIVE_UPDATE_CURRENT_VERSION 0x8
 #define LIVE_UPDATE_MAX_BYTES 4096
 #define LIVE_UPDATE_READ_SIZE 32 // bytes read at a time in idle loop
 
@@ -33,8 +33,6 @@ struct update_header {
     u32_t bss_size_addr;
     u32_t transfer_triples_size;
     u32_t init_size;
-    u32_t ventricle_int_cb;
-    u32_t atrial_int_cb;
 };
 
 void lu_main(void);
