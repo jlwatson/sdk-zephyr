@@ -24,6 +24,8 @@ void lu_main(void) {
     
     lu_uart_init();
 
+    tfm_gpio_set_update_hooks((u32_t) lu_trigger_on_gpio, (u32_t) lu_update_at_gpio);
+
     if (__update_flag) {
         main_ptr();
     } else {

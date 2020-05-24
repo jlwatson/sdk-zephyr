@@ -52,44 +52,10 @@ void z_timer_expiration_handler(struct _timeout *t)
 	struct k_timer *timer = CONTAINER_OF(t, struct k_timer, timeout);
 	struct k_thread *thread;
 
-    /*
-    printk("timer (top of fn):\n");
-    printk("\ttimeout:\n");
-    printk("\t\ttimeout->node: %x\n", timer->timeout.node);
-    printk("\t\ttimeout->dticks: %x\n", timer->timeout.dticks);
-    printk("\t\ttimeout->fn: %x\n", timer->timeout.fn);
-    printk("\twait_q: %x\n", timer->wait_q);
-    printk("\texpiry_fn: %p\n", timer->expiry_fn);
-    printk("\tstop_fn: %p\n", timer->stop_fn);
-    printk("\tperiod: %d\n", timer->period);
-    printk("\tstatus: %d\n", timer->status);
-    */
-
 #ifdef CONFIG_LIVE_UPDATE
-    if(lu_trigger_on_timer()) {
-        //printk("timer before %p\n", timer);
-        //printk("  exp(): %p  stop(): %p\n", timer->expiry_fn, timer->stop_fn);
-        lu_state_transfer_timer(&timer);
-        //printk("timer after %p\n", timer);
-        //printk("  exp(): %p  stop(): %p\n", timer->expiry_fn, timer->stop_fn);
-
-        //volatile int b = 1;
-        //while(b);
+    if(lu_trigger_on_timer(timer)) {
+        lu_update_at_timer(timer);
     }
-
-    /*
-    printk("timer (bot of fn):\n");
-    printk("\ttimeout:\n");
-    printk("\t\ttimeout.node: %x\n", timer->timeout.node);
-    printk("\t\ttimeout.dticks: %x\n", timer->timeout.dticks);
-    printk("\t\ttimeout.fn: %x\n", timer->timeout.fn);
-    printk("\twait_q: %x\n", timer->wait_q);
-    printk("\texpiry_fn: %p\n", timer->expiry_fn);
-    printk("\tstop_fn: %p\n", timer->stop_fn);
-    printk("\tperiod: %d\n", timer->period);
-    printk("\tstatus: %d\n", timer->status);
-    */
-
 #endif // CONFIG_LIVE_UPDATE
 
 	/*

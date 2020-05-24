@@ -73,10 +73,6 @@ void lu_uart_idle_read () {
         num_bytes_to_read = LIVE_UPDATE_READ_SIZE;
     }
 
-//#ifdef CONFIG_LIVE_UPDATE_DEBUG
-    //printk("already read %d bytes, reading at most %d bytes to %x\n", rx_bytes, num_bytes_to_read, ((unsigned char *)rx_buf) + rx_bytes);
-//#endif // CONFIG_LIVE_UPDATE_DEBUG
-    
     int len = uart_fifo_read(uart_dev, ((unsigned char *)rx_buf) + rx_bytes, num_bytes_to_read);
     if (len == 0) {
         atomic_set(&rx_ready, 0);
@@ -95,12 +91,12 @@ void lu_uart_idle_read () {
         u32_t expected_payload_size = sizeof(struct update_header) + 
                               hdr->text_size +
                               hdr->rodata_size +
-                              hdr->transfer_triples_size +
-                              hdr->init_size;
+                              hdr->predicates_size +
+                              hdr->transfers_size;
         if (rx_bytes == expected_payload_size) {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-            printk("Received complete header, starting update write: hdr->text_size=%d, hdr->rodata_size=%d, hdr->transfer_triples_size=%d, hdr->init_size=%d, rx_bytes total=%d\n",
-                    hdr->text_size, hdr->rodata_size, hdr->transfer_triples_size, hdr->init_size, rx_bytes);
+            printk("Received complete header, starting update write: hdr->text_size=%d, hdr->rodata_size=%d, hdr->predicates_size=%d, hdr->transfers_size=%d, rx_bytes total=%d\n",
+                    hdr->text_size, hdr->rodata_size, hdr->predicates_size, hdr->transfers_size, rx_bytes);
 #endif // CONFIG_LIVE_UPDATE_DEBUG
             lu_write_update(hdr);
         }

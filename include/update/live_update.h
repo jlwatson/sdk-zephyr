@@ -12,8 +12,8 @@
 #include <tfm_gpio_veneers.h>
 #include <tfm_flash_veneers.h>
 
-#define LIVE_UPDATE_CURRENT_VERSION 0x8
-#define LIVE_UPDATE_MAX_BYTES 4096
+#define LIVE_UPDATE_CURRENT_VERSION 10
+#define LIVE_UPDATE_MAX_BYTES 8192
 #define LIVE_UPDATE_READ_SIZE 32 // bytes read at a time in idle loop
 
 extern volatile u32_t __update_flag;
@@ -31,14 +31,88 @@ struct update_header {
     u32_t bss_size;
     u32_t bss_start_addr;
     u32_t bss_size_addr;
-    u32_t transfer_triples_size;
-    u32_t init_size;
+    u32_t n_predicates;
+    u32_t predicates_size;
+    u32_t transfers_size;
+};
+
+struct predicate_header {
+    u32_t size;
+    u32_t event_handler_addr;
+    u32_t n_memory_checks;
+    u32_t n_active_timers;
+    u32_t n_gpio_interrupt_cbs;
+    u32_t gpio_interrupt_enabled;
+    u32_t gpio_out_enabled;
+    u32_t gpio_out_set;
+};
+
+struct predicate_memory_check {
+    u32_t check_addr;
+    u32_t check_size;
+    u8_t *check_value;
+};
+
+struct predicate_active_timer {
+    u32_t base_addr;
+    u32_t duration;
+    u32_t period; 
+};
+
+struct predicate_gpio_interrupt_cb {
+    u32_t pin;
+    u32_t cb_addr;
+};
+
+struct transfer_header {
+    u32_t size;
+    u32_t new_event_handler_addr;
+    u32_t n_memory;
+    u32_t n_init_memory;
+    u32_t n_timers;
+    u32_t n_active_timers;
+    u32_t n_gpio_interrupt_cbs;
+    u32_t gpio_interrupt_enabled;
+    u32_t gpio_out_enabled;
+    u32_t gpio_out_set;
+};
+
+struct transfer_memory {
+    u32_t src_addr;
+    u32_t dst_addr;
+    u32_t size; 
+};
+
+struct transfer_init_memory {
+    u32_t addr;
+    u32_t size;
+    u8_t *value;
+};
+
+struct transfer_timer {
+    u32_t base_addr;
+    u32_t expire_cb;
+    u32_t stop_cb;
+};
+
+struct transfer_active_timer {
+    u32_t base_addr;
+    u32_t duration;
+    u32_t period;
+};
+
+struct transfer_gpio_interrupt_cb {
+    u32_t pin;
+    u32_t cb_addr;
 };
 
 void lu_main(void);
 
-bool lu_trigger_on_timer(void);
-void lu_state_transfer_timer(struct k_timer **);
+bool lu_trigger_on_timer(struct k_timer *);
+bool lu_trigger_on_gpio(u32_t);
+
+void lu_update_at_timer(struct k_timer *);
+void lu_update_at_gpio();
 
 void lu_uart_idle_read(void);
 void lu_uart_reset(void);

@@ -2,6 +2,7 @@
  * Live update idle
  */
 
+#include <kernel.h>
 #include <string.h>
 #include <timeout_q.h>
 #include <wait_q.h>
@@ -9,132 +10,188 @@
 
 static u8_t update_ready;
 static struct update_header *lu_hdr;
+static u32_t satisfied_predicate_index = 0;
 
-inline bool lu_trigger_on_timer(void) {
-#ifdef CONFIG_LIVE_UPDATE_FUTURE
-#ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("timer trigger: ready? %d next expiry %x\n", update_ready, z_get_next_timeout_expiry());
-    if (update_ready && z_get_next_timeout_expiry() == INT_MAX) {
-        printk("live_update: update triggered on timer\n");
+bool _predicate_satisfied(struct predicate_header *p) {
+
+    struct predicate_memory_check *curr_m = (struct predicate_memory_check *) ((u8_t *)p) + sizeof(struct predicate_header);
+    for (int i = 0; i < p->n_memory_checks; 
+            i++, curr_m = (struct predicate_memory_check *) (((u8_t *)curr_m) + curr_m->check_size + (2 * sizeof(u32_t)))) {
+
+        if (memcmp((u8_t *)curr_m->check_addr, curr_m->check_value, curr_m->check_size) != 0) {
+            return false;
+        }
     }
-#endif // CONFIG_LIVE_UPDATE_DEBUG
-    return update_ready &&
-           z_get_next_timeout_expiry() == INT_MAX;  // don't bother if there are other timers active or no update
-#else
-    return false;
-#endif // CONFIG_LIVE_UPDATE_FUTURE
+
+    // take advantage of the fact we just iterated to the active timer list
+    struct predicate_active_timer *curr_a = (struct predicate_active_timer *)curr_m;
+    for (int i = 0; i < p->n_active_timers; i++, curr_a++) {
+        struct k_timer *a_t = (struct k_timer *) curr_a->base_addr;
+        if (a_t->period != k_ticks_to_ms_floor64(a_t->period) ||
+            z_is_inactive_timeout(&a_t->timeout)) {
+            return false;
+        }
+    }
+
+    if (tfm_gpio_interrupts_enabled() != p->gpio_interrupt_enabled) {
+        return false;
+    }
+
+    if (tfm_gpio_output_enabled() != p->gpio_out_enabled) {
+        return false;
+    }
+
+    if (tfm_gpio_dataout() != p->gpio_out_set) {
+        return false;
+    }
+
+    // take advantage of the fact we just iterated to the callback list
+    struct predicate_gpio_interrupt_cb *curr_g = (struct predicate_gpio_interrupt_cb *)curr_a;
+    for (int i = 0; i < p->n_gpio_interrupt_cbs; i++, curr_g++) {
+        if (tfm_gpio_interrupt_callback_for_pin(curr_g->pin) != curr_g->cb_addr) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
-void lu_state_transfer(void) {
-#ifdef CONFIG_LIVE_UPDATE_FUTURE
-    //u32_t start_tick = *(u32_t *)0xE000E018;
-    u32_t *triple = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size);
-    u32_t *init_triples = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size + lu_hdr->transfer_triples_size);
-    u32_t *end = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size + lu_hdr->transfer_triples_size + lu_hdr->init_size);
-
-    // copy data
-    //printk("state transfer copy: triple[0] = %x\n", triple[0]);
-    while (triple != init_triples) {
-        u32_t *from_addr = (u32_t *) triple[0];
-        u32_t *to_addr = (u32_t *) triple[1];
-        u32_t size = triple[2];
-
-        //printk("\t%p -> %p (%d bytes)\n", from_addr, to_addr, size);
-        memcpy(to_addr, from_addr, size);
-
-        triple += 3;
-    } 
-    //u32_t end_tick = *(u32_t *)0xE000E018;
-    //printk("Data copy: %d ticks\n", start_tick - end_tick);
-
-    //start_tick = *(u32_t *)0xE000E018;
-    // set timer callbacks correctly
-    while (triple != end) {
-        struct k_timer *t = (struct k_timer *) triple[0];
-        t->expiry_fn = (k_timer_expiry_t) triple[1];
-        t->stop_fn = (k_timer_stop_t) triple[2];
-
-        // for now, just empty timer waitq XXX remove this eventually
-        z_waitq_init(&(t->wait_q));
-
-        triple += 3;
+bool _predicate_satisfied_timer(struct predicate_header *p, struct k_timer *t) {
+    if (p->event_handler_addr != (u32_t) t->expiry_fn) {
+        return false;
     }
-    //end_tick = *(u32_t *)0xE000E018;
-    //printk("Timer setup: %d ticks\n", start_tick - end_tick);
    
-    // XXX TODO hacky get rid of this
-    /*
-    gpio_int_config sense_cfg = {
+    return _predicate_satisfied(p); 
+}
+
+bool _predicate_satisfied_gpio(struct predicate_header *p, u32_t cb_addr) {
+    if (p->event_handler_addr != cb_addr) {
+        return false;
+    }
+
+    return _predicate_satisfied(p);
+}
+
+bool lu_trigger_on_timer(struct k_timer *t) {
+
+    if (!update_ready) return false;    
+
+    struct predicate_header *p = (struct predicate_header *) ((u8_t *)lu_hdr) + sizeof(struct update_header);
+    for (int p_idx = 0; p_idx < lu_hdr->n_predicates; p_idx++, p = (struct predicate_header *)(((u8_t *)p) + p->size)) {
+        if (_predicate_satisfied_timer(p, t)) {
+            satisfied_predicate_index = p_idx;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool lu_trigger_on_gpio(u32_t cb_addr) {
+    if (!update_ready) return false;    
+
+    struct predicate_header *p = (struct predicate_header *)(((u8_t *)lu_hdr) + sizeof(struct update_header));
+    for (int p_idx = 0; p_idx < lu_hdr->n_predicates; p_idx++, p = (struct predicate_header *)(((u8_t *)p) + p->size)) {
+        if (_predicate_satisfied_gpio(p, cb_addr)) {
+            satisfied_predicate_index = p_idx;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void _apply_transfer(struct transfer_header *t) {
+
+    struct transfer_memory *curr_m = (struct transfer_memory *)(((u8_t *)t) + sizeof(struct transfer_header));
+    for (int i = 0; i < t->n_memory; i++, curr_m++) {
+        memcpy((u32_t *)curr_m->dst_addr, (u32_t *)curr_m->src_addr, curr_m->size * sizeof(u32_t));
+    }
+
+    struct transfer_init_memory *curr_i = (struct transfer_init_memory *)curr_m;
+    for (int i = 0; i < t->n_init_memory;
+        i++, curr_i = (struct transfer_init_memory *)(((u8_t *)curr_i) + curr_i->size + (2 * sizeof(u32_t)))) {
+        memcpy((u32_t *)curr_i->addr, curr_i->value, curr_i->size);
+    }
+
+    struct transfer_timer *curr_t = (struct transfer_timer *)curr_i;
+    for (int i = 0; i < t->n_timers; i++, curr_t++) {
+        struct k_timer *k = (struct k_timer *)curr_t->base_addr;
+        k->expiry_fn = (k_timer_expiry_t) curr_t->expire_cb;
+        k->stop_fn = (k_timer_stop_t) curr_t->stop_cb;
+    }
+
+    struct transfer_active_timer *curr_at = (struct transfer_active_timer *)curr_t;
+    for (int i = 0; i < t->n_active_timers; i++, curr_at++) {
+        struct k_timer *k = (struct k_timer *)curr_at->base_addr;
+        z_impl_k_timer_start(k, curr_at->duration, curr_at->period); // start the timer so we can trigger stop events if needed
+    }
+
+    for (int i = 0; i < 32; i++) tfm_gpio_interrupt_disable(i);
+
+    // Note: TODO does not support polarity/type configuration
+    struct transfer_gpio_interrupt_cb *curr_cb = (struct transfer_gpio_interrupt_cb *)curr_at;
+
+    gpio_int_config cfg = {
         .type = 1,
         .polarity = 1,
-        .cb = (void (*)(void)) lu_hdr->ventricle_int_cb
+        .cb = NULL 
     };
 
-    tfm_gpio_interrupt_enable(6, &sense_cfg);
+    for (int i = 0; i < t->n_gpio_interrupt_cbs; i++, curr_cb++) {
+        cfg.cb = (void (*)(void)) curr_cb->cb_addr;
+        tfm_gpio_interrupt_enable(curr_cb->pin, &cfg);       
+    }
 
-    sense_cfg.cb = (void (*)(void)) lu_hdr->atrial_int_cb;
-    tfm_gpio_interrupt_enable(7, &sense_cfg);
-    */
-
-#endif // CONFIG_LIVE_UPDATE_FUTURE
+    tfm_gpio_disable_all_outputs();
+    tfm_gpio_enable_outputs(t->gpio_out_enabled);
+    tfm_gpio_write_all(t->gpio_out_set);
 }
 
-void lu_state_transfer_timer(struct k_timer **t) {
-#ifdef CONFIG_LIVE_UPDATE_FUTURE
-#ifdef CONFIG_LIVE_UPDATE_DEBUG
-    //printk("transferring state...\n");
-#endif // CONFIG_LIVE_UPDATE_DEBUG
-    lu_state_transfer();
+void _apply_transfer_timer(struct transfer_header *transfer, struct k_timer *timer) {
+    _apply_transfer(transfer);
 
-    // modify what timer we're interested in to new
-    //printk("rewiring timer... &t: %p t: %p *t: %p \n", &t, t, *t);
+    // Rewire timer expiry to the new version
+    timer->expiry_fn = (k_timer_expiry_t) transfer->new_event_handler_addr;
+}
+
+void lu_update_at_timer(struct k_timer *timer) {
     
-    //u32_t start_tick = *(u32_t *)0xE000E018;
-    u32_t *triple = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size);
-    u32_t *init_triples = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size + lu_hdr->transfer_triples_size);
-    //u32_t *end = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size + lu_hdr->rodata_size + lu_hdr->transfer_triples_size + lu_hdr->init_size);
+    if (!update_ready) return;
 
-    //u32_t *updated_timer_location = 0x0;
-    //printk("  looking for timer at *t = %p\n", *t);
-    while (triple != init_triples) {
-        u32_t *from_addr = (u32_t *) triple[0];
-        u32_t *to_addr = (u32_t *) triple[1];
+    struct transfer_header *transfer = (struct transfer_header *)(((u8_t *)lu_hdr) + sizeof(struct update_header) + lu_hdr->predicates_size);
+    for (int t_idx = 0; t_idx < satisfied_predicate_index;
+            t_idx++, transfer = (struct transfer_header *)(((u8_t *)transfer) + transfer->size));
 
-        //printk("    considering transfer item %p -> %p\n", from_addr, to_addr);
+    _apply_transfer_timer(transfer, timer); 
 
-        if (from_addr == (u32_t *) *t) {
-            //printk("    it's a match\n");
-            //triple = init_triples;
-            //updated_timer_location = to_addr;
-            *t = (struct k_timer *) to_addr;
-            break;
-        }
-        triple += 3;
-    } 
+    satisfied_predicate_index = 0;
 
-    // rewire timer callbacks into new application
-    /*
-    printk("  looking for init item at timer address %p\n", *t);
-    while (triple != end) {
-        printk("    considering init item at %x\n", triple[0]);
-        if (updated_timer_location == triple[0]) {
-            printk("    it's a match, modifying expiry and stop functions\n");
-            (*t)->expiry_fn = (k_timer_expiry_t) triple[1];
-            (*t)->stop_fn = (k_timer_stop_t) triple[2];
-            break;
-        }
-        triple += 3;
-    }
-    */
-    //u32_t end_tick = *(u32_t *)0xE000E018;
-    //printk("Timer rewire: %d ticks\n", start_tick - end_tick);
-
-    //printk("DONE\n");
     update_ready = 0;
     lu_hdr = NULL;
     lu_uart_reset();
-#endif // CONFIG_LIVE_UPDATE_FUTURE
 }
+
+void lu_update_at_gpio() {
+    
+    if (!update_ready) return;
+
+    struct transfer_header *transfer = (struct transfer_header *)(((u8_t *)lu_hdr) + sizeof(struct update_header) + lu_hdr->predicates_size);
+    for (int t_idx = 0; t_idx < satisfied_predicate_index;
+            t_idx++, transfer = (struct transfer_header *)(((u8_t *)transfer) + transfer->size));
+
+    _apply_transfer(transfer); 
+
+    // Existing interrupt callback already set by transfer to updated application, so nothing else needed
+
+    satisfied_predicate_index = 0;
+
+    update_ready = 0;
+    lu_hdr = NULL;
+    lu_uart_reset();
+}
+
+/* --------- flash writes in background --------- */
 
 typedef void _next_cb(void);
 _next_cb *next = NULL;
@@ -146,33 +203,8 @@ void _lu_write_update_flag() {
         next = NULL;
     }
 
-#ifdef CONFIG_LIVE_UPDATE_DEBUG
-    /*
-    //printk("-- sanity check --\n");
-    u32_t buf;
-
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_read(hdr->update_flag_addr, &buf, 4);
-    if (rc != 0) {
-        printk("flash read returned with code %d\n", rc);
-    }
-    //printk("*update_flag_addr(%x) = %x\n", hdr->update_flag_addr, buf);
-
-    while(tfm_flash_is_busy());
-    rc = tfm_flash_read(hdr->main_ptr_addr, &buf, 4);
-    if (rc != 0) {
-        printk("flash read returned with code %d\n", rc);
-    }
-    //printk("*main_ptr_addr(%x) = %x\n", hdr->main_ptr_addr, buf);
-    */
-#endif // CONFIG_LIVE_UPDATE_DEBUG
-
     // set update flag in RAM
     update_ready = 1;    
-#ifdef CONFIG_LIVE_UPDATE_DEBUG
-    //printk("lu write done\n");
-#endif // CONFIG_LIVE_UPDATE_DEBUG
-
 }
 
 void _lu_write_main_ptr() {
@@ -207,23 +239,9 @@ void _lu_write_rodata() {
             next = _lu_write_bss_loc;
         }
     }
-
-    /*
-#ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("writing following rodata (%d bytes) to %x: ", hdr->rodata_size, hdr->rodata_start);
-    for (int i = 0; i < (hdr->rodata_size / 4); i++) {
-        printk("%x ", update_rodata[i]);
-    }
-    printk("\n");
-#endif // CONFIG_LIVE_UPDATE_DEBUG
-    */
 }
 
 void _lu_write_text() {
-#ifdef CONFIG_LIVE_UPDATE_DEBUG
-    //printk("main_ptr@%x: %x -> %x\n", hdr->main_ptr_addr, *(u32_t *)hdr->main_ptr_addr, hdr->main_ptr);
-    //printk("update_flag@%x: %x -> %x\n", hdr->update_flag_addr, *(u32_t *)hdr->update_flag_addr, 1);
-#endif // CONFIG_LIVE_UPDATE_DEBUG
     u32_t *update_text = (u32_t *)((u8_t *)lu_hdr + sizeof(struct update_header));
 
     // write app .text
@@ -232,21 +250,8 @@ void _lu_write_text() {
     if (tfm_flash_write(lu_hdr->text_start, update_text, lu_hdr->text_size) == 0) {
         next = _lu_write_rodata;
     }
-
-    /*
-#ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("writing following text (%d bytes) to %x: ", hdr->text_size, hdr->text_start);
-    for (int i = 0; i < (hdr->text_size / 4); i++) {
-        printk("%x ", update_text[i]);
-    }
-    printk("\n");
-#endif // CONFIG_LIVE_UPDATE_DEBUG
-    */
 }
 
-/*
- * Assumes fully-received update payload
- */
 void lu_write_update(struct update_header *hdr) {
 
     lu_hdr = hdr;
@@ -258,7 +263,6 @@ void lu_write_update(struct update_header *hdr) {
 
 void lu_write_update_step() {
     if (!tfm_flash_write_step()) {
-        //printk("update step\n");
         if (next) next();
     }
 }
