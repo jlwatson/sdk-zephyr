@@ -13,7 +13,7 @@
 #include <tfm_flash_veneers.h>
 
 #define LIVE_UPDATE_CURRENT_VERSION 10
-#define LIVE_UPDATE_MAX_BYTES 8192
+#define LIVE_UPDATE_MAX_BYTES 0x6000
 #define LIVE_UPDATE_READ_SIZE 32 // bytes read at a time in idle loop
 
 extern volatile u32_t __update_flag;
@@ -34,7 +34,7 @@ struct update_header {
     u32_t n_predicates;
     u32_t predicates_size;
     u32_t transfers_size;
-};
+} __attribute__((packed));
 
 struct predicate_header {
     u32_t size;
@@ -45,24 +45,24 @@ struct predicate_header {
     u32_t gpio_interrupt_enabled;
     u32_t gpio_out_enabled;
     u32_t gpio_out_set;
-};
+} __attribute__((packed));
 
 struct predicate_memory_check {
     u32_t check_addr;
     u32_t check_size;
     u8_t *check_value;
-};
+} __attribute__((packed, aligned(1)));
 
 struct predicate_active_timer {
     u32_t base_addr;
     u32_t duration;
     u32_t period; 
-};
+} __attribute__((packed));
 
 struct predicate_gpio_interrupt_cb {
     u32_t pin;
     u32_t cb_addr;
-};
+} __attribute__((packed));
 
 struct transfer_header {
     u32_t size;
@@ -75,36 +75,36 @@ struct transfer_header {
     u32_t gpio_interrupt_enabled;
     u32_t gpio_out_enabled;
     u32_t gpio_out_set;
-};
+} __attribute__((packed));
 
 struct transfer_memory {
     u32_t src_addr;
     u32_t dst_addr;
     u32_t size; 
-};
+} __attribute__((packed));
 
 struct transfer_init_memory {
     u32_t addr;
     u32_t size;
     u8_t *value;
-};
+} __attribute__((packed, aligned(1)));
 
 struct transfer_timer {
     u32_t base_addr;
     u32_t expire_cb;
     u32_t stop_cb;
-};
+} __attribute__((packed));
 
 struct transfer_active_timer {
     u32_t base_addr;
     u32_t duration;
     u32_t period;
-};
+} __attribute__((packed));
 
 struct transfer_gpio_interrupt_cb {
     u32_t pin;
     u32_t cb_addr;
-};
+} __attribute__((packed));
 
 void lu_main(void);
 

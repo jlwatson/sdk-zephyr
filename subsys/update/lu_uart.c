@@ -48,8 +48,7 @@ void lu_uart_reset(void) {
     rx_bytes = 0;
 }
 
-/*
- * Receive callback. Sets a flag to trigger short reads in the idle loop.
+/* * Receive callback. Sets a flag to trigger short reads in the idle loop.
  */
 void lu_uart_rx_cb (struct device *x) {
     if (x == uart_dev && uart_irq_rx_ready(x)) {
@@ -95,8 +94,8 @@ void lu_uart_idle_read () {
                               hdr->transfers_size;
         if (rx_bytes == expected_payload_size) {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-            printk("Received complete header, starting update write: hdr->text_size=%d, hdr->rodata_size=%d, hdr->predicates_size=%d, hdr->transfers_size=%d, rx_bytes total=%d\n",
-                    hdr->text_size, hdr->rodata_size, hdr->predicates_size, hdr->transfers_size, rx_bytes);
+            printk("Received complete header, starting update write: hdr->text_size=%d, hdr->rodata_size=%d, hdr->predicates_size=%d, hdr->transfers_size=%d, rx_bytes total=%d, rx_buf at %p\n",
+                    hdr->text_size, hdr->rodata_size, hdr->predicates_size, hdr->transfers_size, rx_bytes, (unsigned char *)rx_buf);
 #endif // CONFIG_LIVE_UPDATE_DEBUG
             lu_write_update(hdr);
         }
