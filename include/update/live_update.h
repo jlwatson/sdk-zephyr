@@ -93,6 +93,8 @@ struct transfer_timer {
     u32_t base_addr;
     u32_t expire_cb;
     u32_t stop_cb;
+    u32_t duration;
+    u32_t period;
 } __attribute__((packed));
 
 struct transfer_active_timer {
@@ -111,7 +113,7 @@ void lu_main(void);
 bool lu_trigger_on_timer(struct k_timer *);
 bool lu_trigger_on_gpio(u32_t);
 
-void lu_update_at_timer(struct k_timer *);
+void lu_update_at_timer(struct k_timer **);
 void lu_update_at_gpio();
 
 void lu_uart_idle_read(void);

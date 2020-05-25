@@ -55,7 +55,9 @@ void z_timer_expiration_handler(struct _timeout *t)
 
 #ifdef CONFIG_LIVE_UPDATE
     if(lu_trigger_on_timer(timer)) {
-        lu_update_at_timer(timer);
+        printk("timer before: %p\n", timer);
+        lu_update_at_timer(&timer);
+        printk("timer after: %p\n", timer);
     }
 #endif // CONFIG_LIVE_UPDATE
 

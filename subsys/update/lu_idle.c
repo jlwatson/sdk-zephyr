@@ -39,8 +39,7 @@ bool _predicate_satisfied(struct predicate_header *p) {
             printk("timer at %x inactive, return false\n", curr_a->base_addr);
             return false;
         }
-
-        if ((curr_a->period != 0 || a_t->period != 0) &&
+if ((curr_a->period != 0 || a_t->period != 0) &&
             curr_a->period != k_ticks_to_ms_floor64(a_t->period)) {
             printk("timer period %d ticks, %d ms, expected period %d, return false\n", curr_a->period, a_t->period, k_ticks_to_ms_floor64(a_t->period));
             return false;
@@ -231,18 +230,42 @@ void _apply_transfer(struct transfer_header *t) {
     printk("done\n");
 }
 
-void _apply_transfer_timer(struct transfer_header *transfer, struct k_timer *timer) {
-    printk("applying generic transfer\n");
-    _apply_transfer(transfer);
+u32_t get_timer_base_for_expiry(struct transfer_header *transfer, u32_t expiry_addr) {
+
+    struct transfer_memory *curr_m = (struct transfer_memory *)((u8_t *)transfer + sizeof(struct transfer_header));
+    for (int i = 0; i < transfer->n_memory; i++, curr_m++);
+
+    struct transfer_init_memory *curr_i = (struct transfer_init_memory *)curr_m;
+    for (int i = 0; i < transfer->n_init_memory;
+        i++, curr_i = (struct transfer_init_memory *)((u8_t *)curr_i + curr_i->size + (2 * sizeof(u32_t))));
+
+    struct transfer_timer *curr_t = (struct transfer_timer *)curr_i;
+    for (int i = 0; i < transfer->n_timers; i++, curr_t++) {
+        struct k_timer *k = (struct k_timer *)curr_t->base_addr;
+        if ((u32_t) k->expiry_fn == expiry_addr) {
+            k->period = k_ms_to_ticks_ceil32(curr_t->period);
+            return curr_t->base_addr;
+        }
+    }
+    return 0;
+}
+
+void _apply_transfer_timer(struct transfer_header *transfer, struct k_timer **timer) {
 
     // Rewire timer expiry to the new version
     printk("rewiring expiry\n");
-    timer->expiry_fn = (k_timer_expiry_t) transfer->new_event_handler_addr;
+    (*timer)->expiry_fn = (k_timer_expiry_t) transfer->new_event_handler_addr;
+
+    printk("applying generic transfer\n");
+    _apply_transfer(transfer);
+
+    printk("modifying timer\n");
+    *timer = (struct k_timer *) get_timer_base_for_expiry(transfer, transfer->new_event_handler_addr);
 
     printk("apply transfer done\n");
 }
 
-void lu_update_at_timer(struct k_timer *timer) {
+void lu_update_at_timer(struct k_timer **timer) {
     
     if (!update_ready) return;
 
@@ -382,8 +405,6 @@ void _lu_write_text() {
     }
 }
 
-int update_count = 0;
-
 void _lu_write_only_ram(struct update_header *hdr) {
     u32_t *update_text = (u32_t *)((u8_t *)hdr + sizeof(struct update_header));
     u32_t *update_rodata = (u32_t *)((u8_t *)hdr + sizeof(struct update_header) + hdr->text_size);
@@ -398,18 +419,6 @@ void _lu_write_only_ram(struct update_header *hdr) {
 void lu_write_update(struct update_header *hdr) {
 
     //printk("write update with hdr %p\n", hdr);
-    update_count++;
-
-    if (update_count == 2) {
-
-        printk("hdr->text: %x, size: %x\n", hdr->text_start, hdr->text_size);
-        printk("hdr->rodata: %x, size: %x\n", hdr->rodata_start, hdr->rodata_size);
-        printk("hdr->bss: %x, size: %x\n", hdr->bss_start, hdr->bss_size);
-
-        volatile int b = 1;
-        while(b);
-    }
-
     lu_hdr = hdr;
     _lu_write_only_ram(hdr);
 
