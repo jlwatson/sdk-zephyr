@@ -155,7 +155,9 @@ void idle(void *unused1, void *unused2, void *unused3)
 #endif
 
 	while (true) {
+#ifdef CONFIG_LIVE_UPDATE
         lu_uart_idle_read();
+#endif
 
 #if SMP_FALLBACK
 		k_busy_wait(100);

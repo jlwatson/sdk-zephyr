@@ -63,41 +63,47 @@ void lu_uart_idle_read () {
     lu_write_update_step();    
 
     // don't do anything if no bytes are pending
-    if (!atomic_get(&rx_ready)) return;
-
-    u32_t num_bytes_to_read = LIVE_UPDATE_MAX_BYTES - rx_bytes;
-
-    // cap read size to something small
-    if (num_bytes_to_read > LIVE_UPDATE_READ_SIZE) {
-        num_bytes_to_read = LIVE_UPDATE_READ_SIZE;
-    }
-
-    int len = uart_fifo_read(uart_dev, ((unsigned char *)rx_buf) + rx_bytes, num_bytes_to_read);
-    if (len == 0) {
-        atomic_set(&rx_ready, 0);
+    if (!atomic_get(&rx_ready)) {
         return;
     }
-    rx_bytes += len;
 
-    if (rx_bytes >= sizeof(struct update_header)) {
-        struct update_header *hdr = (struct update_header *)((void *)rx_buf);
+    while (true) {
+        u32_t num_bytes_to_read = LIVE_UPDATE_MAX_BYTES - rx_bytes;
 
-        if (hdr->version != LIVE_UPDATE_CURRENT_VERSION) {
-            printk("lu_uart_idle_read: expected version %d, got version %d\n", LIVE_UPDATE_CURRENT_VERSION, hdr->version);
+        // cap read size to something small
+        /*
+        if (num_bytes_to_read > LIVE_UPDATE_READ_SIZE) {
+            num_bytes_to_read = LIVE_UPDATE_READ_SIZE;
+        }
+        */
+
+        int len = uart_fifo_read(uart_dev, ((unsigned char *)rx_buf) + rx_bytes, num_bytes_to_read);
+        if (len == 0) {
+            atomic_set(&rx_ready, 0);
             return;
         }
+        rx_bytes += len;
 
-        u32_t expected_payload_size = sizeof(struct update_header) + 
-                              hdr->text_size +
-                              hdr->rodata_size +
-                              hdr->predicates_size +
-                              hdr->transfers_size;
-        if (rx_bytes == expected_payload_size) {
+        if (rx_bytes >= sizeof(struct update_header)) {
+            struct update_header *hdr = (struct update_header *)((void *)rx_buf);
+
+            if (hdr->version != LIVE_UPDATE_CURRENT_VERSION) {
+                printk("lu_uart_idle_read: expected version %d, got version %d\n", LIVE_UPDATE_CURRENT_VERSION, hdr->version);
+                return;
+            }
+
+            u32_t expected_payload_size = sizeof(struct update_header) + 
+                                  hdr->text_size +
+                                  hdr->rodata_size +
+                                  hdr->predicates_size +
+                                  hdr->transfers_size;
+            if (rx_bytes == expected_payload_size) {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-            printk("Received complete header, starting update write: hdr->text_size=%d, hdr->rodata_size=%d, hdr->predicates_size=%d, hdr->transfers_size=%d, rx_bytes total=%d, rx_buf at %p\n",
-                    hdr->text_size, hdr->rodata_size, hdr->predicates_size, hdr->transfers_size, rx_bytes, (unsigned char *)rx_buf);
+                printk("Received complete header, starting update write: hdr->text_size=%d, hdr->rodata_size=%d, hdr->predicates_size=%d, hdr->transfers_size=%d, rx_bytes total=%d, rx_buf at %p\n",
+                        hdr->text_size, hdr->rodata_size, hdr->predicates_size, hdr->transfers_size, rx_bytes, (unsigned char *)rx_buf);
 #endif // CONFIG_LIVE_UPDATE_DEBUG
-            lu_write_update(hdr);
+                lu_write_update(hdr);
+            }
         }
     }
 }

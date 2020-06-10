@@ -49,15 +49,12 @@ SYS_INIT(init_timer_module, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_OBJECTS);
  */
 void z_timer_expiration_handler(struct _timeout *t)
 {
-    printk("timer cb: %p\n", t);
 	struct k_timer *timer = CONTAINER_OF(t, struct k_timer, timeout);
 	struct k_thread *thread;
 
 #ifdef CONFIG_LIVE_UPDATE
     if(lu_trigger_on_timer(timer)) {
-        printk("timer before: %p\n", timer);
         lu_update_at_timer(&timer);
-        printk("timer after: %p\n", timer);
     }
 #endif // CONFIG_LIVE_UPDATE
 
