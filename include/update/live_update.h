@@ -9,8 +9,8 @@
 #include <drivers/uart.h>
 #include <zephyr/types.h>
 
-#include <tfm_gpio_veneers.h>
-#include <tfm_flash_veneers.h>
+//#include <tfm_gpio_veneers.h>
+//#include <tfm_flash_veneers.h>
 
 #define LIVE_UPDATE_CURRENT_VERSION 10
 #define LIVE_UPDATE_MAX_BYTES 0x6000
