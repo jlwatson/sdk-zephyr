@@ -215,7 +215,7 @@ static int flash_nrf_write(struct device *dev, off_t addr,
 		return 0;
 	}
 
-	SYNC_LOCK();
+	//SYNC_LOCK();
 
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
 	if (ticker_is_initialized(0)) {
@@ -226,7 +226,7 @@ static int flash_nrf_write(struct device *dev, off_t addr,
 		ret = write(addr, data, len);
 	}
 
-	SYNC_UNLOCK();
+	//SYNC_UNLOCK();
 
 	return ret;
 }

@@ -105,7 +105,7 @@ LINKER_FILL_REGION = """
         .fill :
         {{
             FILL(0xFF);
-            . = __appflash_text_start + 0x1FE00 - 1;
+            . = __appflash_text_start + 0x10000 - 1;
             BYTE(0xAA)
         }} {0}
 """
@@ -135,6 +135,8 @@ SOURCE_CODE_INCLUDES = """
 #include <kernel_structs.h>
 
 #include <string.h>
+#include <drivers/flash.h>
+#include <sys/printk.h>
 
 volatile u32_t __update_flag __attribute__((section(".rodata"))) = 0;
 """
@@ -168,6 +170,19 @@ MEMCPY_TEMPLATE = """
         if ((u32_t *) __update_flag == NULL) {{
             (void)memcpy(&__{0}_{1}_start, &__{0}_{1}_rom_start,
 		        (u32_t) &__{0}_{1}_size);
+        }}
+"""
+
+FLASHCPY_TEMPLATE = """
+        if ((u32_t *) __update_flag == NULL) {{
+            struct device *flash_dev = device_get_binding(DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL);
+            flash_write_protection_set(flash_dev, false);
+
+            volatile off_t start = (off_t) &__{0}_{1}_start;
+            volatile void *rom_start = (void *) &__{0}_{1}_rom_start;
+            volatile u32_t size = (u32_t) &__{0}_{1}_size;
+
+            flash_write(flash_dev, start, rom_start, size);
         }}
 """
 
@@ -328,8 +343,10 @@ def generate_linker_script(linker_file, sram_data_linker_file, sram_bss_linker_f
         if memory_type != "SRAM":
             gen_string += MPU_RO_REGION_END.format(memory_type.lower())
 
+        '''
         if memory_type == 'APPFLASH':
             gen_string += LINKER_FILL_REGION.format(LOAD_ADDRESS_LOCATION_FLASH.format(memory_type))
+        '''
 
         if memory_type == 'SRAM':
             gen_string_sram_data += string_create_helper("data", memory_type, full_list_of_sections, 1)
@@ -370,7 +387,10 @@ def generate_memcpy_code(memory_type, full_list_of_sections, code_generation):
             continue
 
         if full_list_of_sections[mtype] and generate_section[mtype]:
-            code_generation["copy_code"] += MEMCPY_TEMPLATE.format(memory_type.lower(), mtype)
+            if mtype in ["text", "rodata"]:
+                code_generation["copy_code"] += FLASHCPY_TEMPLATE.format(memory_type.lower(), mtype)
+            else:
+                code_generation["copy_code"] += MEMCPY_TEMPLATE.format(memory_type.lower(), mtype)
             code_generation["extern"] += EXTERN_LINKER_VAR_DECLARATION.format(
                 memory_type.lower(), mtype)
 
