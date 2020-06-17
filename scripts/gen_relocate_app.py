@@ -178,9 +178,9 @@ FLASHCPY_TEMPLATE = """
             struct device *flash_dev = device_get_binding(DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL);
             flash_write_protection_set(flash_dev, false);
 
-            volatile off_t start = (off_t) &__{0}_{1}_start;
-            volatile void *rom_start = (void *) &__{0}_{1}_rom_start;
-            volatile u32_t size = (u32_t) &__{0}_{1}_size;
+            off_t start = (off_t) &__{0}_{1}_start;
+            void *rom_start = (void *) &__{0}_{1}_rom_start;
+            u32_t size = (u32_t) &__{0}_{1}_size;
 
             flash_write(flash_dev, start, rom_start, size);
         }}
