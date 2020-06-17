@@ -54,5 +54,5 @@
 };
 
 &sram0_ns {
-	reg = <0x20020000 DT_SIZE_K(128)>;
+	reg = <0x20020000 DT_SIZE_K(64)>;
 };
