@@ -7,6 +7,7 @@
 
 #include <autoconf.h>
 #include <drivers/uart.h>
+#include <drivers/gpio.h>
 #include <zephyr/types.h>
 
 #define LIVE_UPDATE_CURRENT_VERSION 11
@@ -111,7 +112,7 @@ bool lu_trigger_on_timer(struct k_timer *);
 bool lu_trigger_on_gpio(u32_t);
 
 void lu_update_at_timer(struct k_timer **);
-//void lu_update_at_gpio();
+void lu_update_at_gpio(struct gpio_callback **);
 
 void lu_write_step(void);
 void lu_uart_reset(void);

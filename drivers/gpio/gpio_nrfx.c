@@ -280,6 +280,17 @@ static int gpio_nrfx_pin_interrupt_configure(struct device *port,
 	return gpiote_pin_int_cfg(port, pin);
 }
 
+void gpio_nrfx_init_callback(struct gpio_callback *callback,
+        gpio_callback_handler_t handler,
+        gpio_port_pins_t pin_mask)
+{
+    __ASSERT(callback, "Callback pointer should not be NULL");
+    __ASSERT(handler, "Callback handler pointer should not be NULL");
+
+    callback->handler = handler;
+    callback->pin_mask = pin_mask;
+}
+
 static int gpio_nrfx_manage_callback(struct device *port,
 				     struct gpio_callback *callback,
 				     bool set)
@@ -429,7 +440,15 @@ static inline void fire_callbacks(struct device *port, u32_t pins)
 #ifdef CONFIG_LIVE_UPDATE
             if(lu_trigger_on_gpio((u32_t) cb->handler)) {
                 printk("TRIGGER GPIO UPDATE\n");
-                // TODO lu_update_at_gpio(&cb);
+                
+                // remove all current callbacks
+                struct gpio_callback *old_cb, *tmp;
+                SYS_SLIST_FOR_EACH_CONTAINER_SAFE(list, old_cb, tmp, node) {
+                    printk("removing %p\n", old_cb);
+                    gpio_nrfx_manage_callback(port, old_cb, false);
+                }
+
+                lu_update_at_gpio(&cb);
             }
 #endif
 			cb->handler(port, cb, cb->pin_mask & pins);

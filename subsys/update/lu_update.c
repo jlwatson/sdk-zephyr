@@ -12,10 +12,12 @@
 
 extern struct update_header *lu_hdr;
 extern u8_t update_write_completed;
+extern void gpio_nrfx_init_callback(struct gpio_callback *, gpio_callback_handler_t, gpio_port_pins_t);
 
 bool _lu_update_predicate_satisfied(struct predicate_header *p, u32_t event_addr);
 void _lu_state_transfer();
-struct k_timer * _lu_get_timer_for_expiry();
+struct k_timer *_lu_get_timer_for_expiry();
+struct gpio_callback *_lu_get_gpio_callback_for_event();
 
 static struct predicate_header *matched_predicate = NULL;
 
@@ -59,7 +61,7 @@ bool lu_trigger_on_gpio(u32_t cb_addr) {
         return false;
     }
 
-    printk("checking predicates for gpio callback %x\n", cb_addr);
+    //printk("checking predicates for gpio callback %x\n", cb_addr);
 
     struct predicates_header *predicates = (struct predicates_header *)(
             (u8_t *)lu_hdr +
@@ -76,11 +78,11 @@ bool lu_trigger_on_gpio(u32_t cb_addr) {
             matched_predicate = curr_predicate;
             return true;            
         }
-        printk("  no dice\n");
+        //printk("  no dice\n");
         curr_predicate = (struct predicate_header *)((u8_t *)curr_predicate + curr_predicate->size);
     }
 
-    printk("returning false\n");
+    //printk("returning false\n");
     return false;
 }
 
@@ -133,13 +135,10 @@ void lu_update_at_timer(struct k_timer **timer) {
 
     if (!update_write_completed || !timer) return;
 
-    // Rewire timer expiry to the new version XXX not necessary?
-    // (*timer)->expiry_fn = (k_timer_expiry_t) ((u32_t)matched_predicate->event_handler_addr | 1); // thumb
-
     _lu_state_transfer();
 
     // Swap timer to the new application version. We can find it by going
-    // through the state overwrites and finding the one that writes the correct
+    // through the hw inits and finding the one that writes the correct
     // callback into the new application.
     struct k_timer *new_timer = (struct k_timer *) _lu_get_timer_for_expiry();
     while (!new_timer) {
@@ -157,12 +156,27 @@ void lu_update_at_timer(struct k_timer **timer) {
     lu_uart_reset();
 }
 
-void lu_update_at_gpio() {
+void lu_update_at_gpio(struct gpio_callback **callback) {
 
-    if (!update_write_completed) return;
+    if (!update_write_completed | !callback) return;
 
     _lu_state_transfer();
 
+    // Swap callback to the new app version. We can find it by going through
+    // the hw inits.
+    struct gpio_callback *new_callback = (struct gpio_callback *) _lu_get_gpio_callback_for_event();
+    while (!new_callback) {
+        printk("Error couldn't resolve gpio callback for event in interrupt-triggered live update\n");
+    }
+
+    /*
+    struct device *port = device_get_binding("GPIO_0");
+    printk("removing %p\n", *callback);
+    gpio_remove_callback(port, *callback);
+    */
+
+    *callback = new_callback;
+    
     printk("gpio triggered update done\n");
 
     // cleanup
@@ -250,6 +264,8 @@ void _lu_state_transfer() {
         struct device *port = device_get_binding("GPIO_0");
         const struct gpio_driver_api *api =
 		    (const struct gpio_driver_api *)port->driver_api;
+	    const struct gpio_driver_data *const data =
+		    (const struct gpio_driver_data *)port->driver_data;
 
         if (fn_thumb == (u32_t) k_timer_init) {
 
@@ -266,7 +282,32 @@ void _lu_state_transfer() {
             api->pin_configure(port,
                     *(&curr_hw->args + 1),
                     *(&curr_hw->args + 2));
+
+        } else if (fn_thumb == (u32_t) z_impl_gpio_pin_interrupt_configure) {
+
+            if ((( *(&curr_hw->args + 2) & GPIO_INT_LEVELS_LOGICAL) != 0) &&
+                ((data->invert & (gpio_port_pins_t)BIT(*(&curr_hw->args + 1))) != 0)) {
+                /* Invert signal bits */
+                *(&curr_hw->args + 2) ^= (GPIO_INT_LOW_0 | GPIO_INT_HIGH_1);
+            }
+
+            enum gpio_int_trig trig = (enum gpio_int_trig)(*(&curr_hw->args + 2) & (GPIO_INT_LOW_0 | GPIO_INT_HIGH_1));
+            enum gpio_int_mode mode = (enum gpio_int_mode)(*(&curr_hw->args + 2) & (GPIO_INT_EDGE | GPIO_INT_DISABLE | GPIO_INT_ENABLE));
+
+            api->pin_interrupt_configure(port, *(&curr_hw->args + 1), mode, trig);
+
+        } else if (fn_thumb == (u32_t) gpio_nrfx_init_callback) {
+            gpio_nrfx_init_callback((struct gpio_callback *)curr_hw->args,
+                    (gpio_callback_handler_t) (*(&curr_hw->args + 1) | 1),
+                    *(&curr_hw->args + 2));
+
+        } else if (fn_thumb == (u32_t) api->manage_callback) {
+            printk("adding %p\n", (void *)*(&curr_hw->args + 1));
+            api->manage_callback(port,
+                    (struct gpio_callback *)*(&curr_hw->args + 1),
+                    true);
         }
+
         curr_hw = (struct hw_init *)((u8_t *)curr_hw + curr_hw->size);
     }
 
@@ -330,6 +371,50 @@ struct k_timer * _lu_get_timer_for_expiry() {
             u32_t stop_cb = *(&curr_hw->args + 2);
             if (stop_cb == (u32_t) matched_predicate->updated_event_handler_addr) {
                 return (struct k_timer *) curr_hw->args;
+            }
+        }
+        curr_hw = (struct hw_init *)((u8_t *)curr_hw + curr_hw->size);
+    }
+
+    return NULL;
+}
+
+struct gpio_callback *_lu_get_gpio_callback_for_event() {
+    struct predicates_header *predicates = (struct predicates_header *)(
+            (u8_t *)lu_hdr +
+            sizeof(struct update_header) +
+            lu_hdr->text_size +
+            lu_hdr->rodata_size);
+
+    struct transfers_header *transfers = (struct transfers_header *)(
+            (u8_t *)lu_hdr +
+            sizeof(struct update_header) +
+            lu_hdr->text_size +
+            lu_hdr->rodata_size +
+            predicates->size
+            );
+
+    struct hw_init_header *hw_inits = (struct hw_init_header *)(
+            (u8_t *)lu_hdr +
+            sizeof(struct update_header) +
+            lu_hdr->text_size +
+            lu_hdr->rodata_size +
+            predicates->size +
+            transfers->size
+            );
+
+    struct hw_init *curr_hw = (struct hw_init *)(
+            (u8_t *)hw_inits + sizeof(struct hw_init_header));
+
+    while ((u32_t)curr_hw < (u32_t)hw_inits + hw_inits->size) {
+    
+        // XXX hacky again just hard code the gpio_init_callback we care about
+        volatile u32_t fn_thumb = curr_hw->fn_ptr | 1;
+        if (fn_thumb == (u32_t) gpio_nrfx_init_callback) {
+
+            u32_t cb = *(&curr_hw->args + 1);
+            if (cb == (u32_t) matched_predicate->updated_event_handler_addr) {
+                return (struct gpio_callback *) curr_hw->args;
             }
         }
         curr_hw = (struct hw_init *)((u8_t *)curr_hw + curr_hw->size);
