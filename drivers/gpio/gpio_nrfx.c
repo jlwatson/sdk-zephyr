@@ -440,14 +440,6 @@ static inline void fire_callbacks(struct device *port, u32_t pins)
 #ifdef CONFIG_LIVE_UPDATE
             if(lu_trigger_on_gpio((u32_t) cb->handler)) {
                 printk("TRIGGER GPIO UPDATE\n");
-                
-                // remove all current callbacks
-                struct gpio_callback *old_cb, *tmp;
-                SYS_SLIST_FOR_EACH_CONTAINER_SAFE(list, old_cb, tmp, node) {
-                    printk("removing %p\n", old_cb);
-                    gpio_nrfx_manage_callback(port, old_cb, false);
-                }
-
                 lu_update_at_gpio(&cb);
             }
 #endif

@@ -16,6 +16,7 @@ extern void gpio_nrfx_init_callback(struct gpio_callback *, gpio_callback_handle
 
 bool _lu_update_predicate_satisfied(struct predicate_header *p, u32_t event_addr);
 void _lu_state_transfer();
+void _cancel_gpio_callbacks();
 struct k_timer *_lu_get_timer_for_expiry();
 struct gpio_callback *_lu_get_gpio_callback_for_event();
 
@@ -93,20 +94,21 @@ bool _lu_update_predicate_satisfied(struct predicate_header *p, u32_t event_addr
         return false;
     }
     
-    // (2) check reset active operations (aka timers)
-    struct predicate_inactive_operation *curr_inactive_op = (struct predicate_inactive_operation *)(
+    // (2) check inactive and reset operations (aka timers)
+    struct predicate_operation *curr_op = (struct predicate_operation *)(
             (u8_t *)p +
             sizeof(struct predicate_header));
-    for (int i = 0; i < p->n_inactive_ops; i++, curr_inactive_op++) {
+    for (int i = 0; i < p->n_inactive_ops; i++, curr_op++) {
         // XXX assume it's a timer
-        struct k_timer *inactive_t = (struct k_timer *)curr_inactive_op->inactive_op_ptr;
+        struct k_timer *inactive_t = (struct k_timer *)curr_op->op_ptr;
         if (!z_is_inactive_timeout(&inactive_t->timeout)) {
             return false;
         } 
     }
+    for (int i = 0; i < p->n_reset_ops; i++, curr_op++);
 
     // (3) check constraints
-    struct predicate_constraint *curr_constraint = (struct predicate_constraint *) curr_inactive_op;
+    struct predicate_constraint *curr_constraint = (struct predicate_constraint *) curr_op;
     for (int i = 0; i < p->n_constraints; i++) {
         u32_t val = *(u32_t *)curr_constraint->symbol_addr;
         
@@ -135,6 +137,7 @@ void lu_update_at_timer(struct k_timer **timer) {
 
     if (!update_write_completed || !timer) return;
 
+    _cancel_gpio_callbacks();
     _lu_state_transfer();
 
     // Swap timer to the new application version. We can find it by going
@@ -160,6 +163,7 @@ void lu_update_at_gpio(struct gpio_callback **callback) {
 
     if (!update_write_completed | !callback) return;
 
+    _cancel_gpio_callbacks();
     _lu_state_transfer();
 
     // Swap callback to the new app version. We can find it by going through
@@ -168,12 +172,6 @@ void lu_update_at_gpio(struct gpio_callback **callback) {
     while (!new_callback) {
         printk("Error couldn't resolve gpio callback for event in interrupt-triggered live update\n");
     }
-
-    /*
-    struct device *port = device_get_binding("GPIO_0");
-    printk("removing %p\n", *callback);
-    gpio_remove_callback(port, *callback);
-    */
 
     *callback = new_callback;
     
@@ -194,11 +192,17 @@ void _lu_state_transfer() {
             lu_hdr->text_size +
             lu_hdr->rodata_size);
 
-    struct predicate_inactive_operation *io = (struct predicate_inactive_operation *)(
+    // (0) Cancel reset timers
+    struct predicate_operation *curr_op = (struct predicate_operation *)(
             (u8_t *)matched_predicate +
             sizeof(struct predicate_header));
-    for (int i = 0; i < matched_predicate->n_inactive_ops; i++, io++);
-    struct predicate_constraint *c = (struct predicate_constraint *) io;
+    for (int i = 0; i < matched_predicate->n_inactive_ops; i++, curr_op++);
+    for (int i = 0; i < matched_predicate->n_reset_ops; i++, curr_op++) {
+        struct k_timer *reset_t = (struct k_timer *)curr_op->op_ptr;
+	    z_abort_timeout(&reset_t->timeout);
+    }
+
+    struct predicate_constraint *c = (struct predicate_constraint *) curr_op;
     for (int i = 0; i < matched_predicate->n_constraints; i++) {
         c = (struct predicate_constraint *)((u8_t *)c + c->size);
     }
@@ -377,6 +381,40 @@ struct k_timer * _lu_get_timer_for_expiry() {
     }
 
     return NULL;
+}
+
+struct _lu_gpio_nrfx_data {
+	/* gpio_driver_data needs to be first */
+	struct gpio_driver_data common;
+	sys_slist_t callbacks;
+
+	/* Mask holding information about which pins have been configured to
+	 * trigger interrupts using gpio_nrfx_config function.
+	 */
+	u32_t pin_int_en;
+
+	/* Mask holding information about which pins have enabled callbacks
+	 * using gpio_nrfx_enable_callback function.
+	 */
+	u32_t int_en;
+
+	u32_t int_active_level;
+	u32_t trig_edge;
+	u32_t double_edge;
+};
+
+void _cancel_gpio_callbacks() {
+
+    struct device *port = device_get_binding("GPIO_0");
+    const struct gpio_driver_api *api =
+		(const struct gpio_driver_api *)port->driver_api;
+    struct _lu_gpio_nrfx_data *data = port->driver_data;
+	sys_slist_t *list = &data->callbacks;
+
+    struct gpio_callback *old_cb, *tmp;
+    SYS_SLIST_FOR_EACH_CONTAINER_SAFE(list, old_cb, tmp, node) {
+        api->manage_callback(port, old_cb, false);
+    }
 }
 
 struct gpio_callback *_lu_get_gpio_callback_for_event() {

@@ -37,13 +37,14 @@ struct predicate_header {
     u32_t *event_handler_addr;
     u32_t *updated_event_handler_addr;
     u32_t n_inactive_ops;
+    u32_t n_reset_ops;
     u32_t n_constraints;
     u32_t n_state_init;
     u32_t hw_transfer_size;
 } __attribute__((packed));
 
-struct predicate_inactive_operation {
-    u32_t inactive_op_ptr;
+struct predicate_operation {
+    u32_t op_ptr;
 } __attribute__((packed));
 
 struct predicate_constraint {
