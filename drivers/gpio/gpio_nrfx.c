@@ -10,6 +10,10 @@
 
 #include "gpio_utils.h"
 
+#ifdef CONFIG_LIVE_UPDATE
+#include <update/live_update.h>
+#endif
+
 struct gpio_nrfx_data {
 	/* gpio_driver_data needs to be first */
 	struct gpio_driver_data common;
@@ -421,6 +425,13 @@ static inline void fire_callbacks(struct device *port, u32_t pins)
 		 */
 		if ((cb->pin_mask & pins) & data->int_en) {
 			__ASSERT(cb->handler, "No callback handler!");
+
+#ifdef CONFIG_LIVE_UPDATE
+            if(lu_trigger_on_gpio((u32_t) cb->handler)) {
+                printk("TRIGGER GPIO UPDATE\n");
+                // TODO lu_update_at_gpio(&cb);
+            }
+#endif
 			cb->handler(port, cb, cb->pin_mask & pins);
 		}
 	}

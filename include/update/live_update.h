@@ -9,10 +9,7 @@
 #include <drivers/uart.h>
 #include <zephyr/types.h>
 
-//#include <tfm_gpio_veneers.h>
-//#include <tfm_flash_veneers.h>
-
-#define LIVE_UPDATE_CURRENT_VERSION 10
+#define LIVE_UPDATE_CURRENT_VERSION 11
 #define LIVE_UPDATE_MAX_BYTES 0x6000
 #define LIVE_UPDATE_READ_SIZE 1024 // bytes read at a time in idle loop
 
@@ -31,82 +28,82 @@ struct update_header {
     u32_t bss_size;
     u32_t bss_start_addr;
     u32_t bss_size_addr;
-    u32_t n_predicates;
-    u32_t predicates_size;
-    u32_t transfers_size;
+    u32_t payload_size;
 } __attribute__((packed));
 
 struct predicate_header {
     u32_t size;
-    u32_t event_handler_addr;
-    u32_t n_memory_checks;
-    u32_t n_active_timers;
-    u32_t n_gpio_interrupt_cbs;
-    u32_t gpio_interrupt_enabled;
-    u32_t gpio_out_enabled;
-    u32_t gpio_out_set;
+    u32_t *event_handler_addr;
+    u32_t *updated_event_handler_addr;
+    u32_t n_inactive_ops;
+    u32_t n_constraints;
+    u32_t n_state_init;
+    u32_t hw_transfer_size;
 } __attribute__((packed));
 
-struct predicate_memory_check {
-    u32_t check_addr;
-    u32_t check_size;
-    u8_t *check_value;
-} __attribute__((packed, aligned(1)));
-
-struct predicate_active_timer {
-    u32_t base_addr;
-    u32_t duration;
-    u32_t period; 
+struct predicate_inactive_operation {
+    u32_t inactive_op_ptr;
 } __attribute__((packed));
 
-struct predicate_gpio_interrupt_cb {
-    u32_t pin;
-    u32_t cb_addr;
-} __attribute__((packed));
-
-struct transfer_header {
+struct predicate_constraint {
     u32_t size;
-    u32_t new_event_handler_addr;
-    u32_t n_memory;
-    u32_t n_init_memory;
-    u32_t n_timers;
-    u32_t n_active_timers;
-    u32_t n_gpio_interrupt_cbs;
-    u32_t gpio_interrupt_enabled;
-    u32_t gpio_out_enabled;
-    u32_t gpio_out_set;
-} __attribute__((packed, aligned(1)));
+    u32_t symbol_addr;
+    u32_t n_ranges;
+} __attribute__((packed));
 
-struct transfer_memory {
-    u32_t src_addr;
-    u32_t dst_addr;
-    u32_t size; 
-} __attribute__((packed, aligned(1)));
+struct predicate_constraint_range {
+    u32_t lower;
+    u32_t upper;
+} __attribute__((packed));
 
-struct transfer_init_memory {
-    u32_t addr;
+struct predicate_state_transfer {
+    u32_t *addr;
+    u32_t offset;
+    u32_t val;
+} __attribute__((packed));
+
+struct predicate_hw_transfer {
     u32_t size;
-    u8_t *value;
-} __attribute__((packed, aligned(1)));
+    u32_t fn_ptr;
+    u32_t args; 
+} __attribute__((packed));
 
-struct transfer_timer {
-    u32_t base_addr;
-    u32_t expire_cb;
-    u32_t stop_cb;
-    u32_t duration;
-    u32_t period;
-} __attribute__((packed, aligned(1)));
+struct predicates_header {
+    u32_t size;
+} __attribute__((packed));
 
-struct transfer_active_timer {
-    u32_t base_addr;
-    u32_t duration;
-    u32_t period;
-} __attribute__((packed, aligned(1)));
+struct transfer {
+    u32_t *origin;
+    u32_t *dest;
+    u32_t size;
+} __attribute__((packed));
 
-struct transfer_gpio_interrupt_cb {
-    u32_t pin;
-    u32_t cb_addr;
-} __attribute__((packed, aligned(1)));
+struct transfers_header {
+    u32_t size;
+} __attribute__((packed));
+
+struct hw_init {
+    u32_t size;
+    u32_t fn_ptr;
+    u32_t args;
+} __attribute__((packed));
+
+struct hw_init_header {
+    u32_t size;
+} __attribute__((packed));
+
+struct mem_init {
+    u32_t *addr;
+    u32_t offset;
+    u32_t val;
+} __attribute__((packed));
+
+struct mem_init_header {
+    u32_t size;
+} __attribute__((packed));
+
+
+//} __attribute__((packed, aligned(1)));
 
 void lu_main(void);
 
@@ -114,9 +111,9 @@ bool lu_trigger_on_timer(struct k_timer *);
 bool lu_trigger_on_gpio(u32_t);
 
 void lu_update_at_timer(struct k_timer **);
-void lu_update_at_gpio();
+//void lu_update_at_gpio();
 
-void lu_uart_idle_read(void);
+void lu_write_step(void);
 void lu_uart_reset(void);
 
 #endif // ZEPHYR_INCLUDE_UPDATE_LIVE_UPDATE_H_

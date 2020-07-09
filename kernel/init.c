@@ -262,10 +262,6 @@ static void bg_thread_main(void *unused1, void *unused2, void *unused3)
 
 	extern void main(void);
 
-    // XXX debug loop
-    //volatile int b = 1;
-    //while(b);
-
 #ifdef CONFIG_LIVE_UPDATE
     lu_main(); 
 #else

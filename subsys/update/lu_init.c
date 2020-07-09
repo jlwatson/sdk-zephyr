@@ -5,6 +5,7 @@
 #include <update/live_update.h>
 
 extern void lu_uart_init(void);
+extern void lu_write_init(void);
 
 void lu_main(void) {
     
@@ -20,11 +21,10 @@ void lu_main(void) {
     } else {
         printk("calling main @ %p\n", &main);
     }
-#endif // CONFIG_LIVE_UPDATE_DEBUG
+#endif
     
     lu_uart_init();
-
-    tfm_gpio_set_update_hooks((u32_t) lu_trigger_on_gpio, (u32_t) lu_update_at_gpio);
+    lu_write_init();
 
     if (__update_flag) {
         main_ptr();

@@ -156,7 +156,7 @@ void idle(void *unused1, void *unused2, void *unused3)
 
 	while (true) {
 #ifdef CONFIG_LIVE_UPDATE
-        lu_uart_idle_read();
+        lu_write_step();
 #endif
 
 #if SMP_FALLBACK

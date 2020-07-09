@@ -8,12 +8,13 @@
 #include <wait_q.h>
 #include <update/live_update.h>
 
+    /*
 static u8_t update_ready;
 static struct update_header *lu_hdr;
 static u32_t satisfied_predicate_index = 0;
 
 bool _predicate_satisfied(struct predicate_header *p) {
-
+    return false;
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
     printk("    checking memory\n");
 #endif
@@ -118,10 +119,12 @@ bool _predicate_satisfied(struct predicate_header *p) {
 
     return true;
 }
-
-bool _predicate_satisfied_timer(struct predicate_header *p, struct k_timer *t) {
+    */
 
     /*
+bool _predicate_satisfied_timer(struct predicate_header *p, struct k_timer *t) {
+    return false;
+
     printk("checking predicate header at %p:\n", p);
     printk("    size: %x\n", p->size);
     printk("    event_handler_addr: %x\n", p->event_handler_addr);
@@ -133,6 +136,7 @@ bool _predicate_satisfied_timer(struct predicate_header *p, struct k_timer *t) {
     printk("    gpio_out_set: %x\n", p->gpio_out_set);
     */
 
+    /*
     if (p->event_handler_addr != (u32_t) t->expiry_fn) {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
         printk("failed timer predicate: %x not right callback %x\n", p->event_handler_addr, (u32_t) t->expiry_fn);
@@ -157,9 +161,12 @@ bool _predicate_satisfied_gpio(struct predicate_header *p, u32_t cb_addr) {
 
     return _predicate_satisfied(p);
 }
+    */
 
 bool lu_trigger_on_timer(struct k_timer *t) {
+    return false;
 
+    /*
     if (!update_ready) return false;    
 
     while (!t) {
@@ -199,9 +206,12 @@ bool lu_trigger_on_timer(struct k_timer *t) {
     printk("timer check end\n");
 #endif
     return false;
+    */
 }
 
 bool lu_trigger_on_gpio(u32_t cb_addr) {
+    return false;
+    /*
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
     //printk("trigger on gpio?\n");
 #endif
@@ -237,10 +247,11 @@ bool lu_trigger_on_gpio(u32_t cb_addr) {
     printk("gpio check end\n");
 #endif
     return false;
+    */
 }
 
+    /*
 void _apply_transfer(struct transfer_header *t) {
-
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
     printk("transferring memory...");
 #endif
@@ -359,9 +370,11 @@ void _apply_transfer_timer(struct transfer_header *transfer, struct k_timer **ti
     printk("apply transfer done\n");
 #endif
 }
+    */
 
 void lu_update_at_timer(struct k_timer **timer) {
     
+    /*
     if (!update_ready) return;
 
     while (!timer) {
@@ -400,10 +413,12 @@ void lu_update_at_timer(struct k_timer **timer) {
     update_ready = 0;
     lu_hdr = NULL;
     lu_uart_reset();
+    */
 }
 
 void lu_update_at_gpio() {
     
+    /*
     if (!update_ready) return;
 
     struct transfer_header *transfer = (struct transfer_header *) ((u8_t *)lu_hdr +
@@ -439,10 +454,12 @@ void lu_update_at_gpio() {
     update_ready = 0;
     lu_hdr = NULL;
     lu_uart_reset();
+    */
 }
 
 /* --------- flash writes in background --------- */
 
+/*
 typedef void _next_cb(void);
 _next_cb *next = NULL;
 
@@ -548,19 +565,16 @@ void lu_write_update(struct update_header *hdr) {
     lu_hdr = hdr;
     _lu_write_only_ram(hdr);
 
-    /*
-    next = _lu_write_text;
-    if (!tfm_flash_write_step()) {
-        next();
-    }
-    */
+    //next = _lu_write_text;
+    //if (!tfm_flash_write_step()) {
+    //    next();
+    //}
 }
 
 void lu_write_update_step() {
-    /*
-    if (!tfm_flash_write_step()) {
-        if (next) next();
-    }
-    */
+    //if (!tfm_flash_write_step()) {
+    //    if (next) next();
+    //}
 }
+*/
 

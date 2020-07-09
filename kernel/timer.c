@@ -15,7 +15,7 @@
 
 #ifdef CONFIG_LIVE_UPDATE
 #include <update/live_update.h>
-#endif // CONFIG_LIVE_UPDATE
+#endif
 
 static struct k_spinlock lock;
 
@@ -54,6 +54,7 @@ void z_timer_expiration_handler(struct _timeout *t)
 
 #ifdef CONFIG_LIVE_UPDATE
     if(lu_trigger_on_timer(timer)) {
+        printk("TRIGGER TIMER UPDATE\n");
         lu_update_at_timer(&timer);
     }
 #endif // CONFIG_LIVE_UPDATE

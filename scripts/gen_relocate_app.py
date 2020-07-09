@@ -335,6 +335,8 @@ def generate_linker_script(linker_file, sram_data_linker_file, sram_bss_linker_f
     for memory_type, full_list_of_sections in \
             sorted(complete_list_of_sections.items()):
 
+        #print(memory_type, '--', full_list_of_sections)
+
         if memory_type != "SRAM":
             gen_string += MPU_RO_REGION_START.format(memory_type.lower(), memory_type.upper())
         gen_string += string_create_helper("text", memory_type, full_list_of_sections, 1)
@@ -343,10 +345,8 @@ def generate_linker_script(linker_file, sram_data_linker_file, sram_bss_linker_f
         if memory_type != "SRAM":
             gen_string += MPU_RO_REGION_END.format(memory_type.lower())
 
-        '''
         if memory_type == 'APPFLASH':
             gen_string += LINKER_FILL_REGION.format(LOAD_ADDRESS_LOCATION_FLASH.format(memory_type))
-        '''
 
         if memory_type == 'SRAM':
             gen_string_sram_data += string_create_helper("data", memory_type, full_list_of_sections, 1)
@@ -487,7 +487,7 @@ def main():
     global mpu_align
     mpu_align = {}
     parse_args()
-    searchpath = args.directory
+    searchpath = args.directory + '/CMakeFiles'
     linker_file = args.output
     sram_data_linker_file = args.output_sram_data
     sram_bss_linker_file = args.output_sram_bss
@@ -495,13 +495,16 @@ def main():
     complete_list_of_sections = {}
 
     # Create/or trucate file contents if it already exists
-    # raw = open(linker_file, "w")
+    raw = open(linker_file, "w")
+    raw = open(sram_data_linker_file, "w")
+    raw = open(sram_bss_linker_file, "w")
 
     # for each memory_type, create text/rodata/data/bss sections for all obj files
     for memory_type, files in rel_dict.items():
         full_list_of_sections = {"text": [], "rodata": [], "data": [], "bss": []}
 
         for filename in files:
+            print(searchpath, filename)
             obj_filename = get_obj_filename(searchpath, filename)
             # the obj file wasn't found. Probably not compiled.
             if not obj_filename:

@@ -5,6 +5,6 @@ if(CONFIG_LIVE_UPDATE)
 
   zephyr_library()
   zephyr_library_include_directories(${CMAKE_CURRENT_SOURCE_DIR})
-  zephyr_library_sources(lu_init.c lu_idle.c lu_uart.c)
+  zephyr_library_sources(lu_init.c lu_update.c lu_uart.c lu_write.c)
 endif()
 
