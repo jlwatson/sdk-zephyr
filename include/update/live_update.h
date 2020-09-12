@@ -10,17 +10,23 @@
 #include <drivers/gpio.h>
 #include <zephyr/types.h>
 
-#define LIVE_UPDATE_CURRENT_VERSION 11
+#define LIVE_UPDATE_CURRENT_VERSION 13
 #define LIVE_UPDATE_MAX_BYTES 0x6000
 #define LIVE_UPDATE_READ_SIZE 1024 // bytes read at a time in idle loop
 
+#define LIVE_UPDATE_WRITTEN_PIN 19
+#define LIVE_UPDATE_FINISHED_PIN 18
+
 extern volatile u32_t __update_flag;
+extern struct device *update_gpio_dev;
 
 struct update_header {
     u32_t version;
     u32_t main_ptr_addr;
     u32_t main_ptr;
     u32_t update_flag_addr;
+    u32_t write_only_flag;
+    u32_t predicate_only_flag;
     u32_t text_start;
     u32_t text_size;
     u32_t rodata_start;
@@ -50,6 +56,7 @@ struct predicate_operation {
 struct predicate_constraint {
     u32_t size;
     u32_t symbol_addr;
+    u32_t bytes;
     u32_t n_ranges;
 } __attribute__((packed));
 

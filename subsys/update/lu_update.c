@@ -14,6 +14,13 @@ extern struct update_header *lu_hdr;
 extern u8_t update_write_completed;
 extern void gpio_nrfx_init_callback(struct gpio_callback *, gpio_callback_handler_t, gpio_port_pins_t);
 
+volatile u32_t *DWT_CONTROL = (u32_t *) 0xE0001000;
+volatile u32_t *DWT_CYCCNT = (u32_t *) 0xE0001004;
+volatile u32_t *DEMCR = (u32_t *) 0xE000EDFC;
+volatile u32_t *LAR = (u32_t *) 0xE0001FB0;
+
+u32_t update_counter = 0;
+
 bool _lu_update_predicate_satisfied(struct predicate_header *p, u32_t event_addr);
 void _lu_state_transfer();
 void _cancel_gpio_callbacks();
@@ -23,8 +30,10 @@ struct gpio_callback *_lu_get_gpio_callback_for_event();
 static struct predicate_header *matched_predicate = NULL;
 
 bool lu_trigger_on_timer(struct k_timer *t) {
+    update_counter = *DWT_CYCCNT;
 
     if (!update_write_completed || !t || !lu_hdr) {
+        update_counter = 0;
         return false;    
     }
 
@@ -41,16 +50,40 @@ bool lu_trigger_on_timer(struct k_timer *t) {
 //printk("lu_hdr: %p, predicates_header: %p, predicates->size: %d, curr_predicate: %p\n", lu_hdr, predicates, predicates->size, curr_predicate);
 
     // Search for a matching predicate; if found, return true
+    int ctr = 0;
     while ((u32_t)curr_predicate < ((u32_t)predicates + predicates->size)) {
         //printk("current predicate: size = %d, event_handler_addr = %p, n_inactive_ops = %d, n_constraints = %d, n_state_init = %d, hw_transfer_size = %d\n", curr_predicate->size, curr_predicate->event_handler_addr, curr_predicate->n_inactive_ops, curr_predicate->n_constraints, curr_predicate->n_state_init, curr_predicate->hw_transfer_size);
 
         if (_lu_update_predicate_satisfied(curr_predicate, (u32_t)t->expiry_fn)) {
             matched_predicate = curr_predicate;
+
+            u32_t end_counter = *DWT_CYCCNT;
+            u32_t cycles_elapsed = 0;
+            if (end_counter < update_counter) {
+                cycles_elapsed = end_counter + (0xffffffff - update_counter); 
+            } else {
+                cycles_elapsed = end_counter - update_counter;
+            }
+            //printk("PREDICATE DURATION: %d cycles\n", cycles_elapsed);
+            update_counter = 0;
+
+            //printk("PREDICATE %d SATSIFIED\n", ctr);
             return true;            
         }
         //printk("  no dice\n");
         curr_predicate = (struct predicate_header *)((u8_t *)curr_predicate + curr_predicate->size);
+        ctr++;
     }
+
+    u32_t end_counter = *DWT_CYCCNT;
+    u32_t cycles_elapsed = 0;
+    if (end_counter < update_counter) {
+    cycles_elapsed = end_counter + (0xffffffff - update_counter); 
+    } else {
+    cycles_elapsed = end_counter - update_counter;
+    }
+    //printk("PREDICATE DURATION: %d cycles\n", cycles_elapsed);
+    update_counter = 0;
 
     //printk("returning false\n");
     return false;
@@ -58,7 +91,9 @@ bool lu_trigger_on_timer(struct k_timer *t) {
 
 bool lu_trigger_on_gpio(u32_t cb_addr) {
 
+    update_counter = *DWT_CYCCNT;
     if (!update_write_completed || !lu_hdr) {
+        update_counter = 0;
         return false;
     }
 
@@ -73,21 +108,47 @@ bool lu_trigger_on_gpio(u32_t cb_addr) {
     struct predicate_header *curr_predicate = (struct predicate_header *)(
             (u8_t *)predicates + sizeof(struct predicates_header));
 
+    int ctr = 0;
     // Search for a matching predicate; if found, return true
     while ((u32_t)curr_predicate < ((u32_t)predicates + predicates->size)) {
         if (_lu_update_predicate_satisfied(curr_predicate, cb_addr)) {
             matched_predicate = curr_predicate;
+
+            u32_t end_counter = *DWT_CYCCNT;
+            u32_t cycles_elapsed = 0;
+            if (end_counter < update_counter) {
+                cycles_elapsed = end_counter + (0xffffffff - update_counter); 
+            } else {
+                cycles_elapsed = end_counter - update_counter;
+            }
+            //printk("PREDICATE DURATION: %d cycles\n", cycles_elapsed);
+            update_counter = 0;
+
+            //printk("PREDICATE %d SATSIFIED\n", ctr);
             return true;            
         }
         //printk("  no dice\n");
         curr_predicate = (struct predicate_header *)((u8_t *)curr_predicate + curr_predicate->size);
+        ctr++;
     }
 
     //printk("returning false\n");
+    u32_t end_counter = *DWT_CYCCNT;
+    u32_t cycles_elapsed = 0;
+    if (end_counter < update_counter) {
+        cycles_elapsed = end_counter + (0xffffffff - update_counter); 
+    } else {
+        cycles_elapsed = end_counter - update_counter;
+    }
+    //printk("PREDICATE DURATION: %d cycles\n", cycles_elapsed);
+    update_counter = 0;
+
     return false;
 }
 
 bool _lu_update_predicate_satisfied(struct predicate_header *p, u32_t event_addr) {
+
+    //printk("---- %d constraints\n", p->n_constraints);
 
     // (1) check event handler address, masking out thumb bit just in case
     if (((u32_t)(p->event_handler_addr) & ~1) != (event_addr & ~1)) {
@@ -110,18 +171,47 @@ bool _lu_update_predicate_satisfied(struct predicate_header *p, u32_t event_addr
     // (3) check constraints
     struct predicate_constraint *curr_constraint = (struct predicate_constraint *) curr_op;
     for (int i = 0; i < p->n_constraints; i++) {
-        u32_t val = *(u32_t *)curr_constraint->symbol_addr;
-        
-        struct predicate_constraint_range *curr_range = (struct predicate_constraint_range *)(
-                (u8_t *)curr_constraint + sizeof(struct predicate_constraint));
-        bool in_range = false;
-        for (int j = 0; j < curr_constraint->n_ranges; j++, curr_range++) {
-            if (curr_range->lower <= val && val <= curr_range->upper) {
-                in_range = true;
-                break;
-            } 
-        }
 
+        //printk("constraint %d: %d bytes at %x\n", i, curr_constraint->bytes, curr_constraint->symbol_addr);
+        bool in_range = false;
+        if (curr_constraint->bytes == 4) {
+            u32_t val = *(u32_t *)curr_constraint->symbol_addr;
+            //printk("  val = %d\n", val);
+
+            struct predicate_constraint_range *curr_range = (struct predicate_constraint_range *)(
+                    (u8_t *)curr_constraint + sizeof(struct predicate_constraint));
+            for (int j = 0; j < curr_constraint->n_ranges; j++, curr_range++) {
+                if (curr_range->lower <= val && val <= curr_range->upper) {
+                    in_range = true;
+                    break;
+                } 
+            }
+        } else if (curr_constraint->bytes == 2) {
+            u16_t val = *(u16_t *)curr_constraint->symbol_addr;
+            //printk("  val = %d\n", val);
+
+            struct predicate_constraint_range *curr_range = (struct predicate_constraint_range *)(
+                    (u8_t *)curr_constraint + sizeof(struct predicate_constraint));
+            for (int j = 0; j < curr_constraint->n_ranges; j++, curr_range++) {
+                if (curr_range->lower <= val && val <= curr_range->upper) {
+                    in_range = true;
+                    break;
+                } 
+            }
+        } else if (curr_constraint->bytes == 1) {
+            u8_t val = *(u8_t *)curr_constraint->symbol_addr;
+            //printk("  val = %d\n", val);
+
+            struct predicate_constraint_range *curr_range = (struct predicate_constraint_range *)(
+                    (u8_t *)curr_constraint + sizeof(struct predicate_constraint));
+            for (int j = 0; j < curr_constraint->n_ranges; j++, curr_range++) {
+                if (curr_range->lower <= val && val <= curr_range->upper) {
+                    in_range = true;
+                    break;
+                } 
+            }
+        }
+        
         // value does not meet constraint
         if (!in_range) {
             return false;
@@ -130,12 +220,18 @@ bool _lu_update_predicate_satisfied(struct predicate_header *p, u32_t event_addr
         curr_constraint = (struct predicate_constraint *)((u8_t *)curr_constraint + curr_constraint->size);
     }
 
+    // never allow an update if we only want to see predicate evals
+    if (lu_hdr->predicate_only_flag != 0) {
+        return false;
+    }
     return true;
 }
 
 void lu_update_at_timer(struct k_timer **timer) {
 
     if (!update_write_completed || !timer) return;
+
+    update_counter = *DWT_CYCCNT;
 
     _cancel_gpio_callbacks();
     _lu_state_transfer();
@@ -150,18 +246,28 @@ void lu_update_at_timer(struct k_timer **timer) {
 
     *timer = new_timer;
 
-    printk("timer triggered update done\n");
-
     // cleanup
     matched_predicate = NULL;
     update_write_completed = 0;
     lu_hdr = NULL;
     lu_uart_reset();
+
+    u32_t end_counter = *DWT_CYCCNT;
+    u32_t cycles_elapsed = 0;
+    if (end_counter < update_counter) {
+        cycles_elapsed = end_counter + (0xffffffff - update_counter); 
+    } else {
+        cycles_elapsed = end_counter - update_counter;
+    }
+    //printk("TRANSFER DURATION: %d cycles\n", cycles_elapsed);
+    update_counter = 0;
 }
 
 void lu_update_at_gpio(struct gpio_callback **callback) {
 
-    if (!update_write_completed | !callback) return;
+    if (!update_write_completed || !callback) return;
+
+    update_counter = *DWT_CYCCNT;
 
     _cancel_gpio_callbacks();
     _lu_state_transfer();
@@ -175,13 +281,21 @@ void lu_update_at_gpio(struct gpio_callback **callback) {
 
     *callback = new_callback;
     
-    printk("gpio triggered update done\n");
-
     // cleanup
     matched_predicate = NULL;
     update_write_completed = 0;
     lu_hdr = NULL;
     lu_uart_reset();
+
+    u32_t end_counter = *DWT_CYCCNT;
+    u32_t cycles_elapsed = 0;
+    if (end_counter < update_counter) {
+        cycles_elapsed = end_counter + (0xffffffff - update_counter); 
+    } else {
+        cycles_elapsed = end_counter - update_counter;
+    }
+    //printk("TRANSFER DURATION: %d cycles\n", cycles_elapsed);
+    update_counter = 0;
 }
 
 void _lu_state_transfer() {
@@ -306,7 +420,7 @@ void _lu_state_transfer() {
                     *(&curr_hw->args + 2));
 
         } else if (fn_thumb == (u32_t) api->manage_callback) {
-            printk("adding %p\n", (void *)*(&curr_hw->args + 1));
+            //printk("adding %p\n", (void *)*(&curr_hw->args + 1));
             api->manage_callback(port,
                     (struct gpio_callback *)*(&curr_hw->args + 1),
                     true);

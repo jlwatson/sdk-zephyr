@@ -12,6 +12,9 @@
 
 #ifdef CONFIG_LIVE_UPDATE
 #include <update/live_update.h>
+
+extern volatile u32_t *DWT_CYCCNT;
+extern u32_t update_counter;
 #endif
 
 struct gpio_nrfx_data {
@@ -438,9 +441,13 @@ static inline void fire_callbacks(struct device *port, u32_t pins)
 			__ASSERT(cb->handler, "No callback handler!");
 
 #ifdef CONFIG_LIVE_UPDATE
+            //update_counter = *DWT_CYCCNT; 
             if(lu_trigger_on_gpio((u32_t) cb->handler)) {
-                printk("TRIGGER GPIO UPDATE\n");
+                // printk("TRIGGER GPIO UPDATE\n");
                 lu_update_at_gpio(&cb);
+		        gpio_pin_set(update_gpio_dev, LIVE_UPDATE_FINISHED_PIN, 1);
+                for(volatile int i = 0; i < 1000; i++);
+		        gpio_pin_set(update_gpio_dev, LIVE_UPDATE_FINISHED_PIN, 0);
             }
 #endif
 			cb->handler(port, cb, cb->pin_mask & pins);

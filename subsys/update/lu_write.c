@@ -11,6 +11,9 @@
 
 #define FLASH_PAGE_SIZE 0x1000
 
+extern volatile u32_t *DWT_CYCCNT;
+extern u32_t update_counter;
+
 // prototypes
 void lu_write_update(struct update_header *hdr);
 
@@ -83,7 +86,7 @@ void _lu_write_single_page() {
 
 void lu_write_update(struct update_header *hdr) {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("lu_write_update called for hdr at %p\n", hdr);
+    //printk("lu_write_update called for hdr at %p\n", hdr);
 #endif
 
     lu_hdr = hdr;
@@ -96,7 +99,7 @@ void lu_write_step() {
 
 void _lu_write_text() {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("writing .text\n");
+    //printk("writing .text\n");
 #endif
 
     write_data = (u8_t *)lu_hdr + sizeof(struct update_header);
@@ -109,7 +112,7 @@ void _lu_write_text() {
 
 void _lu_write_rodata() {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("writing .rodata\n");
+    //printk("writing .rodata\n");
 #endif
 
     write_data = (u8_t *)lu_hdr + sizeof(struct update_header) + lu_hdr->text_size;
@@ -127,7 +130,7 @@ void _lu_write_rodata() {
 // XXX not writing bss start because it's crashing and we don't need persistance
 void _lu_write_bss_loc() {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("clearing .bss, NOT writing .bss location\n");
+    //printk("clearing .bss, NOT writing .bss location\n");
 #endif
     memset((u8_t *)lu_hdr->bss_start, 0, lu_hdr->bss_size);
 
@@ -146,7 +149,7 @@ void _lu_write_bss_loc() {
 // XXX not writing bss size because it's crashing and we don't need persistance
 void _lu_write_bss_size() {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("writing .bss size\n");
+    //printk("writing .bss size\n");
 #endif
 
     write_data = (u8_t *) &(lu_hdr->bss_size);
@@ -160,7 +163,7 @@ void _lu_write_bss_size() {
 // XXX not writing main ptr because it's crashing and we don't need persistance
 void _lu_write_main_ptr() {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("writing main ptr\n");
+    //printk("writing main ptr\n");
 #endif
 
     write_data = (u8_t *) &(lu_hdr->main_ptr);
@@ -174,7 +177,7 @@ void _lu_write_main_ptr() {
 // XXX not writing update flag because it's crashing and we don't need persistance
 void _lu_write_update_flag() {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("writing update flag\n");
+    //printk("writing update flag\n");
 #endif
 
     u8_t update_flag = 1;
@@ -188,10 +191,12 @@ void _lu_write_update_flag() {
 
 void _lu_write_finalize() {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-    printk("update write complete!\n");
+    //printk("update write complete!\n");
 #endif
 
-    update_write_completed = 1;
+    if (!lu_hdr->write_only_flag) {
+        update_write_completed = 1;
+    }
 
     write_data = NULL;
     write_dest_addr = 0;
@@ -199,4 +204,10 @@ void _lu_write_finalize() {
 
     next = NULL;
     continuation = NULL;
+
+    gpio_pin_set(update_gpio_dev, LIVE_UPDATE_WRITTEN_PIN, 1);
+    for(volatile int i = 0; i < 1000; i++);
+    gpio_pin_set(update_gpio_dev, LIVE_UPDATE_WRITTEN_PIN, 0);
+
+    //update_counter = *DWT_CYCCNT;
 }
