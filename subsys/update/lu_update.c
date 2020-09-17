@@ -213,9 +213,11 @@ bool _lu_update_predicate_satisfied(struct predicate_header *p, u32_t event_addr
         }
         
         // value does not meet constraint
+        /* XXX only disabled for predicate testing XXX
         if (!in_range) {
             return false;
         }
+        */
 
         curr_constraint = (struct predicate_constraint *)((u8_t *)curr_constraint + curr_constraint->size);
     }

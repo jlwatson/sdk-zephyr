@@ -67,8 +67,8 @@ void lu_uart_rx_cb (struct device *x) {
             u32_t expected_payload_size = sizeof(struct update_header) + hdr->payload_size;
             if (rx_bytes == expected_payload_size) {
 #ifdef CONFIG_LIVE_UPDATE_DEBUG
-                //printk("Received complete header, starting update write: hdr->payload_size=%d, rx_bytes total=%d, rx_buf at %p\n",
-                //        hdr->payload_size, rx_bytes, (unsigned char *)rx_buf);
+                printk("Received complete header, starting update write: hdr->payload_size=%d, rx_bytes total=%d, rx_buf at %p\n",
+                        hdr->payload_size, rx_bytes, (unsigned char *)rx_buf);
 #endif
                 lu_write_update(hdr);
             }

@@ -61,8 +61,11 @@ void z_timer_expiration_handler(struct _timeout *t)
     if(lu_trigger_on_timer(timer)) {
         //printk("TRIGGER TIMER UPDATE\n");
         lu_update_at_timer(&timer);
+
 	    gpio_pin_set(update_gpio_dev, LIVE_UPDATE_FINISHED_PIN, 1);
-        for(volatile int i = 0; i < 1000; i++);
+
+        for (volatile int i = 0; i < 1000; i++) {};
+
 	    gpio_pin_set(update_gpio_dev, LIVE_UPDATE_FINISHED_PIN, 0);
     }
 #endif // CONFIG_LIVE_UPDATE
