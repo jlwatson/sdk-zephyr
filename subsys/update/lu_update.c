@@ -5,6 +5,8 @@
 #include <kernel.h>
 #include <device.h>
 #include <drivers/gpio.h>
+#include <drivers/uart.h>
+#include <hal/nrf_uarte.h>
 #include <string.h>
 #include <timeout_q.h>
 #include <wait_q.h>
@@ -13,6 +15,7 @@
 extern struct update_header *lu_hdr;
 extern u8_t update_write_completed;
 extern void gpio_nrfx_init_callback(struct gpio_callback *, gpio_callback_handler_t, gpio_port_pins_t);
+extern void uarte_nrfx_irq_callback_set(struct device *, uart_irq_callback_user_data_t, void *);
 
 volatile u32_t *DWT_CONTROL = (u32_t *) 0xE0001000;
 volatile u32_t *DWT_CYCCNT = (u32_t *) 0xE0001004;
@@ -26,6 +29,7 @@ void _lu_state_transfer();
 void _cancel_gpio_callbacks();
 struct k_timer *_lu_get_timer_for_expiry();
 struct gpio_callback *_lu_get_gpio_callback_for_event();
+uart_irq_callback_user_data_t *_lu_get_uart_callback_for_event();
 
 static struct predicate_header *matched_predicate = NULL;
 
@@ -298,6 +302,43 @@ void lu_update_at_gpio(struct gpio_callback **callback) {
     }
     //printk("TRANSFER DURATION: %d cycles\n", cycles_elapsed);
     update_counter = 0;
+}
+
+void lu_update_at_uart(uart_irq_callback_user_data_t **callback) {
+
+    /*
+    if (!update_write_completed || !callback) return;
+
+    update_counter = *DWT_CYCCNT;
+
+    _cancel_gpio_callbacks();
+    _lu_state_transfer();
+
+    // Swap callback to the new app version. We can find it by going through
+    // the hw inits.
+    uart_irq_callback_user_data_t *new_callback = (struct uart_irq_callback_user_data_t *) _lu_get_uart_callback_for_event();
+    while (!new_callback) {
+        printk("Error couldn't resolve uart callback for event in interrupt-triggered live update\n");
+    }
+
+    *callback = new_callback;
+    
+    // cleanup
+    matched_predicate = NULL;
+    update_write_completed = 0;
+    lu_hdr = NULL;
+    lu_uart_reset();
+
+    u32_t end_counter = *DWT_CYCCNT;
+    u32_t cycles_elapsed = 0;
+    if (end_counter < update_counter) {
+        cycles_elapsed = end_counter + (0xffffffff - update_counter); 
+    } else {
+        cycles_elapsed = end_counter - update_counter;
+    }
+    //printk("TRANSFER DURATION: %d cycles\n", cycles_elapsed);
+    update_counter = 0;
+    */
 }
 
 void _lu_state_transfer() {
@@ -573,6 +614,52 @@ struct gpio_callback *_lu_get_gpio_callback_for_event() {
         }
         curr_hw = (struct hw_init *)((u8_t *)curr_hw + curr_hw->size);
     }
+
+    return NULL;
+}
+
+uart_irq_callback_user_data_t *_lu_get_uart_callback_for_event() {
+    /*
+    struct predicates_header *predicates = (struct predicates_header *)(
+            (u8_t *)lu_hdr +
+            sizeof(struct update_header) +
+            lu_hdr->text_size +
+            lu_hdr->rodata_size);
+
+    struct transfers_header *transfers = (struct transfers_header *)(
+            (u8_t *)lu_hdr +
+            sizeof(struct update_header) +
+            lu_hdr->text_size +
+            lu_hdr->rodata_size +
+            predicates->size
+            );
+
+    struct hw_init_header *hw_inits = (struct hw_init_header *)(
+            (u8_t *)lu_hdr +
+            sizeof(struct update_header) +
+            lu_hdr->text_size +
+            lu_hdr->rodata_size +
+            predicates->size +
+            transfers->size
+            );
+
+    struct hw_init *curr_hw = (struct hw_init *)(
+            (u8_t *)hw_inits + sizeof(struct hw_init_header));
+
+    while ((u32_t)curr_hw < (u32_t)hw_inits + hw_inits->size) {
+    
+        // XXX hacky again just hard code the gpio_init_callback we care about
+        volatile u32_t fn_thumb = curr_hw->fn_ptr | 1;
+        if (fn_thumb == (u32_t) uarte_nrfx_irq_callback_set) {
+
+            u32_t cb = *(&curr_hw->args + 1);
+            if (cb == (u32_t) matched_predicate->updated_event_handler_addr) {
+                return (struct uart_irq_callback_user_data_t *) curr_hw->args;
+            }
+        }
+        curr_hw = (struct hw_init *)((u8_t *)curr_hw + curr_hw->size);
+    }
+    */
 
     return NULL;
 }

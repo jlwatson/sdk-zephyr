@@ -17,6 +17,10 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(uart_nrfx_uarte, LOG_LEVEL_ERR);
 
+#ifdef CONFIG_LIVE_UPDATE
+#include <update/live_update.h>
+#endif
+
 /* Generalize PPI or DPPI channel management */
 #if defined(CONFIG_HAS_HW_NRF_PPI)
 #include <nrfx_ppi.h>
@@ -185,6 +189,22 @@ static void uarte_nrfx_isr_int(void *arg)
 	}
 
 	if (data->int_driven->cb) {
+
+#ifdef CONFIG_LIVE_UPDATE
+        /*
+        if(lu_trigger_on_uart((u32_t) data->int_driven->cb)) {
+            printk("TRIGGER UART UPDATE\n");
+            lu_update_at_uart(&(data->int_driven->cb));
+
+            gpio_pin_set(update_gpio_dev, LIVE_UPDATE_FINISHED_PIN, 1);
+
+            for(volatile int i = 0; i < 1000; i++) {};
+
+            gpio_pin_set(update_gpio_dev, LIVE_UPDATE_FINISHED_PIN, 0);
+        }       
+        */
+#endif
+
 		data->int_driven->cb(data->int_driven->cb_data);
 	}
 }
@@ -1206,7 +1226,7 @@ static int uarte_nrfx_irq_update(struct device *dev)
 }
 
 /** Set the callback function */
-static void uarte_nrfx_irq_callback_set(struct device *dev,
+void uarte_nrfx_irq_callback_set(struct device *dev,
 					uart_irq_callback_user_data_t cb,
 					void *cb_data)
 {
