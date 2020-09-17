@@ -122,10 +122,12 @@ bool lu_trigger_on_uart(u32_t);
 
 void lu_update_at_timer(struct k_timer **);
 void lu_update_at_gpio(struct gpio_callback **);
-void lu_update_at_uart(uart_irq_callback_user_data_t **);
+void lu_update_at_uart(uart_irq_callback_user_data_t *);
 
 void lu_write_step(void);
 void lu_uart_reset(void);
+
+u32_t *lu_get_data(int);
 
 #endif // ZEPHYR_INCLUDE_UPDATE_LIVE_UPDATE_H_
 

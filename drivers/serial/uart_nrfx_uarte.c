@@ -191,7 +191,6 @@ static void uarte_nrfx_isr_int(void *arg)
 	if (data->int_driven->cb) {
 
 #ifdef CONFIG_LIVE_UPDATE
-        /*
         if(lu_trigger_on_uart((u32_t) data->int_driven->cb)) {
             printk("TRIGGER UART UPDATE\n");
             lu_update_at_uart(&(data->int_driven->cb));
@@ -202,7 +201,6 @@ static void uarte_nrfx_isr_int(void *arg)
 
             gpio_pin_set(update_gpio_dev, LIVE_UPDATE_FINISHED_PIN, 0);
         }       
-        */
 #endif
 
 		data->int_driven->cb(data->int_driven->cb_data);
